@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>2026 JBNU-G 리서치페어 위크 참가 신청</title>
+  <meta name="description" content="전북대학교의 연구성과를 나누고 대학과 지역의 미래 발전 방향을 함께 모색하는 2026 JBNU-G 리서치페어 위크. 2026년 12월 22일(화)~23일(수), 전북대학교 진수당. 무료 사전 참가 신청.">
+  <meta name="theme-color" content="#000000">
+  <meta name="color-scheme" content="dark">
+
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="ko_KR">
+  <meta property="og:site_name" content="2026 JBNU-G 리서치페어 위크">
+  <meta property="og:title" content="2026 JBNU-G 리서치페어 위크 참가 신청">
+  <meta property="og:description" content="2026. 12. 22(화) ~ 23(수) · 전북대학교 진수당 · 무료 사전 신청">
+  <meta property="og:image" content="assets/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="2026 JBNU-G RFW">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/rfw.css">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <a class="skip" href="#apply" data-i18n="skip"></a>
+
+  <header class="topbar">
+    <div class="wrap topbar__inner">
+      <a class="topbar__brand" href="#top">
+        <span class="topbar__name" data-i18n="topbar.brand"></span>
+        <span class="topbar__dates" data-i18n="topbar.dates"></span>
+      </a>
+      <button type="button" class="lang" id="lang-toggle"></button>
+    </div>
+  </header>
+
+  <main id="top" class="wrap layout">
+    <div class="intro">
+      <section class="hero" aria-labelledby="hero-title">
+        <div id="rfw" class="rfw" role="img" aria-label=""></div>
+
+        <h1 id="hero-title" class="hero__title">
+          <span class="hero__ko" data-i18n="hero.nameKo"></span>
+          <span class="hero__en" lang="en" data-i18n="hero.nameEn"></span>
+        </h1>
+
+        <p class="hero__when">
+          <span class="hero__date" id="hero-date"></span>
+          <span class="hero__place" data-i18n="hero.place"></span>
+        </p>
+        <p class="hero__status" id="hero-status" role="status" hidden></p>
+
+        <div class="hero__body">
+          <div class="hero__tag">
+            <p class="tagline" id="tagline"></p>
+            <p class="slogan" lang="en" data-i18n="hero.slogan"></p>
+          </div>
+          <p class="hero__intro" data-i18n="intro.body"></p>
+        </div>
+
+        <ul class="facts">
+          <li data-i18n="intro.schedule"></li>
+          <li data-i18n="intro.venue"></li>
+        </ul>
+      </section>
+
+      <section class="program" aria-labelledby="program-title">
+        <div class="program__head">
+          <h2 id="program-title" class="section-title" data-i18n="program.title"></h2>
+          <p class="program__note" data-i18n="program.note"></p>
+        </div>
+        <div class="program__grid" id="program"></div>
+      </section>
+    </div>
+
+    <section class="apply" id="apply" aria-labelledby="apply-title">
+      <div class="card" id="card" aria-busy="true"></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer__inner">
+      <div class="footer__brand">
+        <p class="footer__logo" data-i18n="footer.logoAlt"></p>
+        <a class="footer__apply" id="footer-apply" href="#apply" data-i18n="cta" hidden></a>
+      </div>
+      <dl class="footer__meta">
+        <div><dt data-i18n="footer.host"></dt><dd data-i18n="footer.hostValue"></dd></div>
+        <div><dt data-i18n="footer.contact"></dt><dd id="footer-contact"></dd></div>
+      </dl>
+      <div class="footer__links">
+        <a class="footer__privacy" id="footer-privacy" href="#privacy" data-i18n="footer.privacy"></a>
+      </div>
+      <section class="footer__policy" id="privacy" aria-labelledby="privacy-title" hidden>
+        <h2 class="footer__policy-title" id="privacy-title" data-i18n="privacy.title"></h2>
+        <div class="privacy-table" data-privacy></div>
+      </section>
+    </div>
+  </footer>
+
+  <div class="cta-bar" id="cta-bar" hidden>
+    <a class="cta" id="cta" href="#apply">
+      <span id="cta-label"></span>
+      <svg aria-hidden="true" focusable="false" width="20" height="20" viewBox="0 0 20 20"><path d="M10 4v11m0 0-5-5m5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </a>
+  </div>
+
+  <script src="js/i18n.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

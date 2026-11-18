@@ -1,0 +1,26 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "gradient-text",
+        "value": "*",
+        "files": [
+          "web/index.html"
+        ],
+        "createdAt": "2026-11-18T07:14:45.465Z",
+        "reason": "spec 7-1/7-3 (client spec): tagline key words use green→cyan gradient, mirroring the poster"
+      },
+      {
+        "rule": "gradient-text",
+        "value": "*",
+        "files": [
+          "web/css/app.css"
+        ],
+        "createdAt": "2026-11-18T07:14:52.114Z",
+        "reason": "spec 7-1/7-3 (client spec): tagline emphasis + RFW fallback use the poster's green→cyan gradient"
+      }
+    ]
+  }
+}

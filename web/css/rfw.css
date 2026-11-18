@@ -1,0 +1,41 @@
+/* RFW key-visual lettering (inline SVG from assets/rfw.svg inside <div id="rfw" class="rfw">).
+   Spec 7-1 / 7-3: full container width; mobile ≤ 1/4 of the viewport height;
+   lines draw on once on first load (≤ 1s total), skipped with prefers-reduced-motion. */
+
+.rfw svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+@media (max-width: 900px) {
+  /* viewBox is 1100×250 (ratio 4.4), so 25vh tall = 110vh wide. An inline SVG with
+     width:auto falls back to 300px, hence the explicit min(). */
+  .rfw svg {
+    width: min(100%, 110vh);
+    max-width: 100%;
+    max-height: 25vh;
+  }
+}
+
+/* Draw-on: every line has pathLength="1". Dash 1 + gap 2 so an offset just over 1
+   hides the whole line (no round-cap dot at the start). 87 lines × 3.4ms stagger
+   ≈ 292ms + 700ms draw → finishes within 1s. */
+.rfw .rfw-line {
+  stroke-dasharray: 1 2;
+  stroke-dashoffset: 1.01;
+  animation: rfw-draw 700ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  animation-delay: calc(var(--i, 0) * 3.4ms);
+}
+
+@keyframes rfw-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rfw .rfw-line {
+    animation: none;
+    stroke-dasharray: none;
+    stroke-dashoffset: 0;
+  }
+}

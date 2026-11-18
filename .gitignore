@@ -1,2 +1,9 @@
 # 로컬 참고자료 폴더 (커밋 제외)
 /refs/
+
+# Claude Code 로컬 설정 · Impeccable 스킬/에이전트 (npx impeccable install 로 재설치)
+/.claude/settings.local.json
+/.claude/skills/
+/.claude/agents/
+/.impeccable/hook.cache.json
+/.impeccable/config.local.json

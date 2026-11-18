@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>RFW OG image</title>
+<!-- Source for web/assets/og-image.png (1200×630). Render:
+  chrome --headless=new --disable-gpu --hide-scrollbars --default-background-color=000000ff
+         --virtual-time-budget=5000 --window-size=1200,630
+         --screenshot=web/assets/og-image.png file:///<repo>/tools/og-image.html -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<style>
+  html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; background: #000; }
+  body {
+    box-sizing: border-box;
+    padding: 40px 64px 0;
+    color: #fff;
+    font-family: "Pretendard Variable", Pretendard, -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+    letter-spacing: -0.01em;
+  }
+  .rfw { display: block; width: 100%; height: auto; }
+  .kr { margin: 22px 0 0; font-size: 34px; font-weight: 700; line-height: 1.2; }
+  .en { margin: 6px 0 0; font-size: 124px; font-weight: 800; line-height: 1; letter-spacing: -0.035em; }
+  .when {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin: 18px 0 0; font-size: 36px; font-weight: 700; line-height: 1.2; letter-spacing: -0.02em;
+  }
+  .when sup { font-size: 0.5em; font-weight: 600; vertical-align: 0.85em; margin-left: 2px; }
+  .tag { margin: 18px 0 0; font-size: 22px; font-weight: 500; color: #A3ABAF; letter-spacing: 0; }
+</style>
+</head>
+<body>
+  <img class="rfw" src="../web/assets/rfw.svg" alt="RFW">
+  <p class="kr">2026 JBNU-G 리서치페어 위크</p>
+  <p class="en">2026 JBNU-G RFW</p>
+  <p class="when">
+    <span>2026. 12. 22.<sup>Tue</sup> ~ 12. 23.<sup>Wed</sup></span>
+    <span>전북대학교 진수당</span>
+  </p>
+  <p class="tag">Bridge to JeonbuK NU : From Phase 4 to Phase 5</p>
+</body>
+</html>
