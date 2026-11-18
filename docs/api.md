@@ -34,8 +34,14 @@ Worker가 IP당 횟수 제한을 하고, Apps Script에는 Worker만 아는 비�
 **방문집계**: 날짜 | 유입경로 | 방문수 | 신청수
 
 ## 관리자 API (Apps Script `google.script.run`, 모든 함수가 허용 명단 확인)
-`adminGetSummary()`, `adminList({q, day, status, sort})`, `adminUpdate(receiptNo, patch)`, `adminCancel(receiptNo)`, `adminRestore(receiptNo)`, `adminHistory(receiptNo)`, `adminGetConfig()`, `adminSaveConfig(cfg)`, `adminLogExport(kind, filter)`
+`adminWhoAmI()`, `adminGetSummary()`, `adminList({q, day, status, sort})`, `adminUpdate(receiptNo, patch)`, `adminCancel(receiptNo)`, `adminRestore(receiptNo)`, `adminHistory(receiptNo)`, `adminGetConfig()`, `adminSaveConfig(cfg)`, `adminLogExport(kind, filter)`, `adminExportLog()`, `adminConfigLog()`, `adminAccessLog()`
 화면 개발 단계에서는 `admin/js/api.js` 모의 구현 사용.
+
+- `adminGetSummary()` 집계 기준: `total` = 유효 신청(상태 신청), `canceled` = 상태 취소, `createdTotal` = 신청일 기준 전체(= total + canceled). `daily[]` = `{date, count(신청일 기준 신규, 이후 취소 포함), canceled·restored(처리일 기준), cumulative(그날 끝 기준 유효 신청, 마지막 값 = total), note}`
+- `adminList` 검색어가 숫자·하이픈·공백뿐이면 전화번호로 본다: 4자리는 뒷자리 일치, 5자리 이상은 부분 일치(`010-1234-5678`, `1234-5678`)
+- `adminLogExport` kind: `xlsx` | `csv` | `badge`(취소 제외 행만) | `stats` | `statsXlsx`(행 없음, 기록만)
+- `adminExportLog()` / `adminConfigLog()` / `adminAccessLog()`: 관리자로그 시트에서 행위가 각각 내보내기 / 설정변경 / 로그인인 행, 최근 순. 설정변경 행은 `changes`(사람이 읽는 변경 요약 문장 배열)를 가진다. 로그인 기록은 Apps Script 진입(`doGet`) 때 남긴다
+- 모의 전용: 주소에 `?mockFail=summary,list,export,config` 를 붙이면 해당 호출이 실패해 오류 화면을 확인할 수 있다
 
 ## 집계 규칙
 - 날짜별 예상 인원: 22일 = day1 + both, 23일 = day2 + both (취소 제외)

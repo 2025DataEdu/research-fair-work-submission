@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>관리자 · 2026 JBNU-G 리서치페어 위크</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+  <link rel="stylesheet" href="../web/css/tokens.css">
+  <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+  <a class="skip" href="#main">본문 바로가기</a>
+
+  <header class="topbar">
+    <div class="topbar__brand">
+      <span class="topbar__mark" aria-hidden="true">RFW</span>
+      <div class="topbar__titles">
+        <span class="topbar__event">2026 JBNU-G 리서치페어 위크</span>
+        <span class="topbar__role">접수 관리자</span>
+      </div>
+    </div>
+    <div class="topbar__meta">
+      <span class="status-pill" id="openPill" hidden></span>
+      <span class="topbar__user" id="whoami" aria-label="로그인 계정">확인 중…</span>
+      <a class="btn btn--ghost btn--sm" href="../web/index.html" target="_blank" rel="noopener">접수 페이지 보기<span class="sr-only"> (새 창)</span></a>
+    </div>
+  </header>
+
+  <div class="shell">
+    <nav class="sidenav" aria-label="관리 메뉴">
+      <a class="sidenav__item" href="#/dashboard" data-nav="dashboard">
+        <svg aria-hidden="true" viewBox="0 0 20 20"><path d="M3 17V9M8 17V4M13 17v-6M18 17V7" /></svg>접수 현황</a>
+      <a class="sidenav__item" href="#/list" data-nav="list">
+        <svg aria-hidden="true" viewBox="0 0 20 20"><path d="M3 5h14M3 10h14M3 15h14" /></svg>신청자 목록</a>
+      <a class="sidenav__item" href="#/export" data-nav="export">
+        <svg aria-hidden="true" viewBox="0 0 20 20"><path d="M10 3v10M5.5 8.5 10 13l4.5-4.5M3 17h14" /></svg>내보내기</a>
+      <a class="sidenav__item" href="#/settings" data-nav="settings">
+        <svg aria-hidden="true" viewBox="0 0 20 20"><circle cx="10" cy="10" r="3" /><path d="M10 2v3M10 15v3M2 10h3M15 10h3M4.3 4.3l2.1 2.1M13.6 13.6l2.1 2.1M4.3 15.7l2.1-2.1M13.6 6.4l2.1-2.1" /></svg>설정<span class="dirty-dot" id="navDirty" hidden><span class="sr-only">저장하지 않은 변경 있음</span></span></a>
+      <p class="sidenav__foot">명단에는 개인정보가 들어 있어요. 업무 목적 외 열람·공유를 하지 말아 주세요.</p>
+    </nav>
+
+    <main id="main" tabindex="-1">
+      <!-- 1. 접수 현황 -->
+      <section class="view" id="view-dashboard" data-view="dashboard" aria-labelledby="h-dashboard" hidden>
+        <div class="page-head">
+          <div>
+            <h1 id="h-dashboard" tabindex="-1">접수 현황</h1>
+            <p class="page-sub" id="dashMeta">불러오는 중…</p>
+          </div>
+          <div class="page-actions">
+            <button type="button" class="btn btn--ghost" id="btnRefresh">새로고침</button>
+            <button type="button" class="btn btn--outline" id="btnStats">통계 내려받기 (CSV)</button>
+          </div>
+        </div>
+
+        <div class="kpis" id="kpis" aria-busy="true"></div>
+        <div class="load-error" id="dashError" role="alert" hidden>
+          <p><strong>접수 현황을 불러오지 못했어요.</strong> <span id="dashErrorMsg"></span></p>
+          <button type="button" class="btn btn--outline" id="btnRetry">다시 불러오기</button>
+        </div>
+
+        <div class="dash-body" id="dashBody">
+        <div class="grid-2">
+          <section class="panel" aria-labelledby="h-break">
+            <h2 class="panel__title" id="h-break">참석일 선택별</h2>
+            <p class="panel__hint">양일 신청자는 22일·23일 예상 인원에 모두 더해져요.</p>
+            <div id="dayBreak"></div>
+          </section>
+          <section class="panel" aria-labelledby="h-cap">
+            <h2 class="panel__title" id="h-cap">날짜별 정원</h2>
+            <div id="capacity"></div>
+          </section>
+        </div>
+
+        <section class="panel" aria-labelledby="h-trend">
+          <div class="panel__head">
+            <div>
+              <h2 class="panel__title" id="h-trend">일별 신청 추이</h2>
+              <p class="panel__hint">막대는 신청일 기준 신규 건수(나중에 취소된 건 포함), 선은 그날 끝 기준 유효 신청(취소 반영)이에요. 선의 끝 값은 위 ‘전체 신청’과 같아요. 차트를 선택한 뒤 ←/→ 키로 날짜를 옮길 수 있어요.</p>
+            </div>
+            <button type="button" class="btn btn--ghost btn--sm" id="btnTrendTable" aria-expanded="false" aria-controls="trendTable">표로 보기</button>
+          </div>
+          <div class="chart" id="trendChart"></div>
+          <p class="recon tnum" id="trendRecon"></p>
+          <div id="trendTable" class="table-wrap table-wrap--compact" hidden></div>
+        </section>
+
+        <section class="panel" aria-labelledby="h-src">
+          <h2 class="panel__title" id="h-src">유입 경로</h2>
+          <p class="panel__hint">유효 신청(취소 제외) 기준. 접속 주소의 <code>?src=</code> 값으로 구분해요.</p>
+          <div id="srcBreak"></div>
+        </section>
+        </div>
+      </section>
+
+      <!-- 2. 신청자 목록 -->
+      <section class="view" id="view-list" data-view="list" aria-labelledby="h-list" hidden>
+        <div class="page-head">
+          <div>
+            <h1 id="h-list" tabindex="-1">신청자 목록</h1>
+            <p class="page-sub">휴대전화번호는 가운데 자리를 가려 보여 줘요. 전체 번호는 내보낸 파일에만 들어 있어요.</p>
+          </div>
+          <div class="page-actions">
+            <a class="btn btn--outline" id="lnkExport" href="#/export">이 조건으로 내보내기</a>
+          </div>
+        </div>
+
+        <div class="toolbar" role="search">
+          <div class="field field--search">
+            <label for="q">검색</label>
+            <input id="q" type="search" autocomplete="off" maxlength="60" placeholder="이름, 소속, 접수번호, 전화번호(뒤 4자리 또는 전체)">
+          </div>
+          <div class="field">
+            <span class="field__label" id="lbl-status">상태</span>
+            <div class="seg" role="radiogroup" aria-labelledby="lbl-status" id="statusSeg">
+              <button type="button" role="radio" data-status="active">신청</button>
+              <button type="button" role="radio" data-status="canceled">취소</button>
+              <button type="button" role="radio" data-status="all">전체</button>
+            </div>
+          </div>
+          <div class="field field--days">
+            <span class="field__label" id="lbl-day">참석일</span>
+            <div class="seg" role="radiogroup" aria-labelledby="lbl-day" id="dayChips">
+              <button type="button" role="radio" data-day="all">전체</button>
+              <button type="button" role="radio" data-day="d22"><span data-chip-label="d22">22일</span></button>
+              <button type="button" role="radio" data-day="d23"><span data-chip-label="d23">23일</span></button>
+              <button type="button" role="radio" data-day="both">양일</button>
+            </div>
+          </div>
+          <div class="field field--both" id="includeBothWrap" hidden>
+            <span class="field__label" aria-hidden="true">양일 신청자</span>
+            <label class="switch switch--sm">
+              <input type="checkbox" id="includeBoth" checked>
+              <span class="switch__track" aria-hidden="true"></span>
+              <span id="includeBothText">22일 참석자에 양일 신청자 포함</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="result-bar">
+          <p id="resultText" aria-live="polite">불러오는 중…</p>
+          <p class="asof tnum" id="listAsOf"></p>
+        </div>
+
+        <div class="table-wrap table-wrap--list" id="listWrap">
+          <table class="data-table" id="listTable">
+            <caption class="sr-only">신청자 목록. 이름 버튼을 누르면 상세 정보가 열려요. 위아래 화살표로 행을 옮길 수 있어요.</caption>
+            <thead>
+              <tr>
+                <th scope="col" class="col-no" data-sort="receiptNo"><button type="button">접수번호</button></th>
+                <th scope="col" class="col-created" data-col="created" data-sort="createdAt"><button type="button">신청일시</button></th>
+                <th scope="col" class="col-name" data-sort="name"><button type="button">이름</button></th>
+                <th scope="col" class="col-org" data-sort="org"><button type="button">소속</button></th>
+                <th scope="col" class="col-phone">휴대전화번호</th>
+                <th scope="col" class="col-day" data-sort="day"><button type="button">참석일</button></th>
+                <th scope="col" class="col-status" data-sort="status"><button type="button">상태</button></th>
+              </tr>
+            </thead>
+            <tbody id="listBody"></tbody>
+          </table>
+        </div>
+        <nav class="pager" id="pager" aria-label="목록 페이지"></nav>
+      </section>
+
+      <!-- 3. 내보내기 -->
+      <section class="view" id="view-export" data-view="export" aria-labelledby="h-export" hidden>
+        <div class="page-head">
+          <div>
+            <h1 id="h-export" tabindex="-1">내보내기</h1>
+            <p class="page-sub">명단은 아래 조건으로 내려받아요. 내보낼 때마다 누가 언제 내려받았는지 기록이 남아요.</p>
+          </div>
+        </div>
+
+        <section class="panel panel--filter" aria-labelledby="h-curfilter">
+          <div class="panel__head">
+            <div>
+              <h2 class="panel__title" id="h-curfilter">명단 내보내기 조건</h2>
+              <p class="panel__hint" id="filterOrigin">신청자 목록에서 쓰던 검색·필터가 그대로 이어져요. 바꾸려면 아래에서 고르거나 초기화해 주세요.</p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn--ghost btn--sm" id="btnResetFilter">조건 초기화</button>
+              <a class="btn btn--ghost btn--sm" id="lnkEditFilter" href="#/list">목록에서 조건 바꾸기</a>
+            </div>
+          </div>
+          <div class="filter-summary" id="filterSummary">불러오는 중…</div>
+          <div class="filter-picks">
+            <div class="field">
+              <span class="field__label" id="lbl-xday">참석일 빠른 선택</span>
+              <div class="seg" role="radiogroup" aria-labelledby="lbl-xday" id="exportDays">
+                <button type="button" role="radio" data-xday="all">전체</button>
+                <button type="button" role="radio" data-xday="d22">22일</button>
+                <button type="button" role="radio" data-xday="d23">23일</button>
+                <button type="button" role="radio" data-xday="both">양일</button>
+              </div>
+            </div>
+            <p class="asof tnum" id="exportAsOf"></p>
+          </div>
+        </section>
+
+        <div class="export-grid">
+          <article class="export-card" aria-labelledby="xh-xlsx">
+            <div class="export-card__head">
+              <h2 class="export-card__title" id="xh-xlsx">엑셀 (.xlsx)</h2>
+              <p class="export-card__count tnum" id="cnt-xlsx">…</p>
+            </div>
+            <p id="cols-xlsx">불러오는 중…</p>
+            <p class="export-card__why" id="why-xlsx" hidden></p>
+            <button type="button" class="btn btn--outline" data-export="xlsx" aria-describedby="cnt-xlsx why-xlsx" disabled>엑셀 내려받기</button>
+          </article>
+          <article class="export-card" aria-labelledby="xh-csv">
+            <div class="export-card__head">
+              <h2 class="export-card__title" id="xh-csv">CSV</h2>
+              <p class="export-card__count tnum" id="cnt-csv">…</p>
+            </div>
+            <p id="cols-csv">엑셀 첫 시트와 같은 열이에요. UTF-8(BOM 포함)이라 엑셀에서 열어도 한글이 깨지지 않아요.</p>
+            <p class="export-card__why" id="why-csv" hidden></p>
+            <button type="button" class="btn btn--outline" data-export="csv" aria-describedby="cnt-csv why-csv" disabled>CSV 내려받기</button>
+          </article>
+          <article class="export-card" aria-labelledby="xh-badge">
+            <div class="export-card__head">
+              <h2 class="export-card__title" id="xh-badge">명찰 출력용 (.xlsx)</h2>
+              <p class="export-card__count tnum" id="cnt-badge">…</p>
+            </div>
+            <p id="desc-badge">이름·소속·참석일 세 열, 이름 가나다순. 날짜별 시트(22일 = 22일만 + 양일, 23일 = 23일만 + 양일)로 나눠요. 전화번호는 들어가지 않아요.</p>
+            <p class="export-card__why" id="why-badge" hidden></p>
+            <button type="button" class="btn btn--outline" data-export="badge" aria-describedby="cnt-badge why-badge" disabled>명찰용 엑셀 내려받기</button>
+          </article>
+          <article class="export-card export-card--stats" aria-labelledby="xh-stats">
+            <div class="export-card__head">
+              <h2 class="export-card__title" id="xh-stats">결과보고 통계</h2>
+              <p class="export-card__count tnum" id="cnt-stats">…</p>
+            </div>
+            <p>위 조건과 상관없이 전체 접수 기준이에요. 참석일별 인원, 유입 경로, 일별 추이와 ‘신청 합계 = 유효 + 취소’ 맞춤 행이 들어 있어요.</p>
+            <p class="export-card__why" id="why-stats" hidden></p>
+            <div class="export-card__btns">
+              <button type="button" class="btn btn--outline" data-export="statsXlsx" aria-describedby="cnt-stats why-stats" disabled>통계 엑셀</button>
+              <button type="button" class="btn btn--ghost" data-export="stats" aria-describedby="cnt-stats why-stats" disabled>통계 CSV</button>
+            </div>
+          </article>
+        </div>
+        <p class="notice" id="exportNotice" role="status"></p>
+
+        <div class="callout">
+          <strong>개인정보 취급 안내</strong>
+          명단 파일에는 휴대전화번호 전체가 들어 있어요. 업무 목적(참가 확인, 안내 문자, 명찰·좌석 준비, 결과보고) 외에는 쓰거나 공유하지 말고,
+          행사 종료 6개월 후 파기해 주세요.
+        </div>
+
+        <section class="panel" aria-labelledby="h-explog">
+          <h2 class="panel__title" id="h-explog">내보내기 기록</h2>
+          <div class="table-wrap table-wrap--compact">
+            <table class="data-table data-table--plain">
+              <caption class="sr-only">내보내기 기록. 최근 순.</caption>
+              <thead><tr><th scope="col">일시</th><th scope="col">담당자</th><th scope="col">형식</th><th scope="col">조건</th><th scope="col" class="num">건수</th></tr></thead>
+              <tbody id="exportLog"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <!-- 4. 설정 -->
+      <section class="view" id="view-settings" data-view="settings" aria-labelledby="h-settings" hidden>
+        <div class="page-head">
+          <div>
+            <h1 id="h-settings" tabindex="-1">설정</h1>
+            <p class="page-sub">저장하면 접수 페이지에 바로 반영돼요.</p>
+          </div>
+        </div>
+        <form id="settingsForm" novalidate>
+          <div id="settingsBody"><p class="page-sub">불러오는 중…</p></div>
+          <div class="savebar" id="savebar">
+            <div class="save-confirm" id="saveConfirm" role="group" aria-labelledby="saveConfirmTitle" hidden>
+              <p class="save-confirm__title" id="saveConfirmTitle">저장하면 접수 페이지가 이렇게 바뀌어요</p>
+              <ul class="save-confirm__list" id="saveConfirmList"></ul>
+              <div class="form-actions">
+                <button type="button" class="btn btn--ghost" id="btnConfirmBack">돌아가기</button>
+                <button type="button" class="btn btn--primary" id="btnConfirmSave">확인하고 저장</button>
+              </div>
+            </div>
+            <p class="savebar__state" id="saveState" aria-live="polite">변경 사항 없음</p>
+            <div class="savebar__actions">
+              <button type="button" class="btn btn--ghost" id="btnRevert" disabled>되돌리기</button>
+              <button type="submit" class="btn btn--primary" id="btnSave" disabled>설정 저장</button>
+            </div>
+          </div>
+        </form>
+
+        <div class="grid-2 settings-logs">
+          <section class="panel" aria-labelledby="h-cfglog">
+            <h2 class="panel__title" id="h-cfglog">변경 기록</h2>
+            <p class="panel__hint">설정을 저장할 때마다 누가, 언제, 무엇을 바꿨는지 남아요. 최근 순.</p>
+            <ol class="log-list" id="cfgLog"><li class="log-list__empty">불러오는 중…</li></ol>
+          </section>
+          <section class="panel" aria-labelledby="h-access">
+            <h2 class="panel__title" id="h-access">접속 기록</h2>
+            <p class="panel__hint">관리자 화면에 로그인한 기록이에요. 최근 순.</p>
+            <ol class="log-list" id="accessLog"><li class="log-list__empty">불러오는 중…</li></ol>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- 상세 서랍 -->
+  <div class="scrim" id="scrim" hidden></div>
+  <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" hidden>
+    <div class="drawer__head">
+      <div>
+        <h2 id="drawerTitle" class="drawer__title"><span class="drawer__kind">신청 상세</span> <span class="drawer__no tnum" id="drawerNo">-</span></h2>
+      </div>
+      <button type="button" class="icon-btn" id="drawerClose" aria-label="상세 닫기">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15" /></svg>
+      </button>
+    </div>
+    <div class="confirm confirm--discard" id="discardBox" role="group" aria-labelledby="discardText" hidden>
+      <p id="discardText">저장하지 않은 수정이 있어요. 닫으면 수정한 내용이 사라져요.</p>
+      <div class="form-actions">
+        <button type="button" class="btn btn--ghost" id="btnKeepEditing">계속 수정</button>
+        <button type="button" class="btn btn--danger" id="btnDiscardClose">버리고 닫기</button>
+      </div>
+    </div>
+    <div class="drawer__body" id="drawerBody"></div>
+  </aside>
+
+  <div class="toast-region" id="toasts">
+    <div class="toast-stack" id="toastAlert" role="alert"></div>
+    <div class="toast-stack" id="toastPolite" role="status" aria-live="polite"></div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+  <script src="../web/js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>

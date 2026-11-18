@@ -20,6 +20,24 @@
         ],
         "createdAt": "2026-11-18T07:14:52.114Z",
         "reason": "spec 7-1/7-3 (client spec): tagline emphasis + RFW fallback use the poster's green→cyan gradient"
+      },
+      {
+        "rule": "gradient-text",
+        "value": "*",
+        "files": [
+          "admin/index.html"
+        ],
+        "createdAt": "2026-11-18T08:05:21.964Z",
+        "reason": "spec 7-1 (client spec): settings tagline preview must mirror the participant page's green→cyan keyword gradient"
+      },
+      {
+        "rule": "gradient-text",
+        "value": "*",
+        "files": [
+          "admin/css/admin.css"
+        ],
+        "createdAt": "2026-11-18T08:05:22.065Z",
+        "reason": "spec 7-1 (client spec): settings tagline preview must mirror the participant page's green→cyan keyword gradient"
       }
     ]
   }
