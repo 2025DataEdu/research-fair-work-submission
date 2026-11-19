@@ -12,6 +12,8 @@
   var params = new URLSearchParams(location.search);
   var src = (params.get("src") || "").replace(/[^a-z0-9_-]/gi, "").slice(0, 32) || "direct";
 
+  var SMS_ON = window.RFW_SMS_ENABLED !== false;   // 문자 연동 전에는 문자 관련 안내를 숨김 (js/config.js)
+
   var state = {
     lang: initialLang(),
     config: window.RFW_CONFIG,
@@ -377,7 +379,7 @@
         "<div><dt>" + esc(t("done.day")) + "</dt><dd>" + dayLabel(r.day) + "</dd></div>" +
         (when ? "<div><dt>" + esc(t("done.when")) + '</dt><dd class="summary__when">' + when + "</dd></div>" : "") +
       "</dl>" +
-      '<p class="done__sms">' + icon("info") + "<span>" + esc(t("done.sms")) + "</span></p>" +
+      (SMS_ON ? '<p class="done__sms">' + icon("info") + "<span>" + esc(t("done.sms")) + "</span></p>" : "") +
       '<button type="button" class="btn-outline" id="to-edit">' + esc(t("done.edit")) + "</button>" +
       "</div>";
   }
@@ -438,8 +440,8 @@
     var html = "";
     if (n.type === "duplicate") {
       html = '<div class="notice notice--warn" role="alert">' + icon("info") +
-        '<div class="notice__body"><p>' + esc(t("duplicate.message")) + "</p>" +
-        '<button type="button" class="btn-outline btn-outline--sm" id="resend"' + (state.busy ? " disabled" : "") + ">" + esc(t("duplicate.resend")) + "</button></div></div>";
+        '<div class="notice__body"><p>' + esc(t(SMS_ON ? "duplicate.message" : "duplicate.messageNoSms")) + "</p>" +
+        (SMS_ON ? '<button type="button" class="btn-outline btn-outline--sm" id="resend"' + (state.busy ? " disabled" : "") + ">" + esc(t("duplicate.resend")) + "</button>" : "") + "</div></div>";
     } else if (n.type === "sent") {
       html = '<div class="notice notice--ok" role="status">' + icon("check") + '<div class="notice__body"><p>' + esc(t("duplicate.sent")) + "</p></div></div>";
     } else if (n.type === "error") {
@@ -659,7 +661,7 @@
     } else if (code === "DUPLICATE") {
       state.notice = { type: "duplicate" };
       renderNotice();
-      var r = $("#resend"); if (r) r.focus();
+      var r = $("#resend") || $("#f-phone"); if (r) r.focus();
     } else if (code === "DAY_FULL") {
       state.errors = { day: "errors.dayFull" };
       state.draft.day = "";
@@ -818,6 +820,25 @@
     }).catch(function () { /* 기본 설정 유지 */ });
   }
 
+  // 신청 카드 모양을 바꾸는 설정만 비교(접수 열림·마감, 날짜별 남은 자리)
+  function cardKey(c) {
+    c = c || {};
+    return JSON.stringify([isClosed(c), (c.days || []).map(function (d) { return [d.value, d.capacity, d.remaining]; })]);
+  }
+  // 입력 중이던 값·커서를 지키면서 카드를 다시 그린다
+  function rerenderKeepingFocus() {
+    if (state.view === "form") readForm();
+    var a = document.activeElement, id = a && a.id, s = null, e = null;
+    try { s = a.selectionStart; e = a.selectionEnd; } catch (x) { /* 선택 범위 없는 요소 */ }
+    state.view = isClosed(state.config) ? "closed" : "form";
+    renderCard();
+    var el = id && document.getElementById(id);
+    if (el && el !== document.activeElement) {
+      el.focus({ preventScroll: true });
+      try { if (s != null) el.setSelectionRange(s, e); } catch (x) { /* 라디오·체크박스 */ }
+    }
+  }
+
   function init() {
     applyStatic();
     loadRfw();
@@ -837,6 +858,22 @@
       this.setAttribute("aria-expanded", String(state.privacyOpen));
       if (state.privacyOpen) scrollToEl($("#privacy"));
     });
+
+    // 새 신청: 서버 설정을 기다리지 않고 기본 설정으로 폼을 먼저 띄운다(명세 8장: 4G 첫 화면 3초 이내).
+    // 마감·정원은 신청할 때 서버가 다시 확인하므로, 설정이 늦게 와도 잘못 접수되지 않는다.
+    if (!state.token) {
+      state.view = isClosed(state.config) ? "closed" : "form";
+      renderCard();
+      var before = cardKey(state.config);
+      refreshConfig().then(function () {
+        applyStatic();
+        if (state.mode !== "new" || state.busy) return;
+        if (state.view !== "form" && state.view !== "closed") return;
+        if (cardKey(state.config) === before) return;
+        rerenderKeepingFocus();
+      });
+      return;
+    }
 
     // 확인 문자의 개인 링크(?t=)로 들어오면 휴대폰에서도 바로 신청 카드(수정·취소·잘못된 링크)가 보이게
     var fromLink = !!state.token;

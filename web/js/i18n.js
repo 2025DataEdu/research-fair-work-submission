@@ -83,6 +83,7 @@ window.RFW_I18N = {
     },
     duplicate: {
       message: "이미 신청하셨어요. 수정 링크를 문자로 다시 보내 드릴까요?",
+      messageNoSms: "이미 신청하셨어요.",   // 문자 연동 전(RFW_SMS_ENABLED=false) 임시 — 원문 첫 문장만
       resend: "수정 링크 다시 받기",
       sent: "수정 링크를 문자로 다시 보냈어요."
     },
@@ -182,6 +183,7 @@ window.RFW_I18N = {
     },
     duplicate: {
       message: "You've already registered. Shall we text you your edit link again?",
+      messageNoSms: "You've already registered.",
       resend: "Resend edit link",
       sent: "We've texted you your edit link again."
     },
