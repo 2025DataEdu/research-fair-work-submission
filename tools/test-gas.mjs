@@ -296,7 +296,7 @@ check('모르는 action → BAD_REQUEST', post({ action: 'drop' }).code === 'BAD
 /* =================== 4. config =================== */
 section('config');
 {
-  const web = { window: {} }; vm.createContext(web);
+  const web = { window: {}, location: { hostname: 'localhost' } }; vm.createContext(web);
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'web/js/config.js'), 'utf8'), web);
   const res = post({ action: 'config', src: 'sms' });
   check('config ok', res.ok === true);
