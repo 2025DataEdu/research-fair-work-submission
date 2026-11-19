@@ -6,7 +6,7 @@ workers_dev = true
 
 [vars]
 # Apps Script 웹앱 배포 주소 (…/macros/s/<배포 ID>/exec). 비어 있으면 모든 호출이 SERVER 로 응답한다.
-GAS_URL = ""
+GAS_URL = "https://script.google.com/macros/s/AKfycbzTfjeB7MZumCinjPTVGEJhv5jgIMTGHHQxODMgG5xUPCOmptTpbF6WQvDf2eOffT5M/exec"
 # 참가자 화면이 열리는 주소(출처). 쉼표로 구분, 끝 '/' 없이. Cloudflare Pages 주소가 생기면 여기에 추가.
 ALLOWED_ORIGINS = "https://2025dataedu.github.io,http://localhost:8787,http://127.0.0.1:8787"
 # GAS_KEY 는 비밀값이라 여기에 쓰지 않는다:  npx wrangler secret put GAS_KEY
