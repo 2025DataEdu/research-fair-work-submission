@@ -73,6 +73,19 @@
           </section>
         </div>
 
+        <div class="grid-2">
+          <section class="panel" aria-labelledby="h-aff">
+            <h2 class="panel__title" id="h-aff">소속 구분별</h2>
+            <p class="panel__hint">유효 신청(취소 제외) 기준이에요. 이름을 누르면 그 구분의 신청자 목록이 열려요.</p>
+            <div id="affBreak"></div>
+          </section>
+          <section class="panel" aria-labelledby="h-prog">
+            <h2 class="panel__title" id="h-prog">세부 프로그램별</h2>
+            <p class="panel__hint">유효 신청 기준이에요. 한 사람이 여러 프로그램을 고를 수 있어 합계가 인원보다 많을 수 있어요. 비율은 그날 예상 인원 대비예요.</p>
+            <div id="progBreak"></div>
+          </section>
+        </div>
+
         <section class="panel" aria-labelledby="h-trend">
           <div class="panel__head">
             <div>
@@ -109,7 +122,7 @@
         <div class="toolbar" role="search">
           <div class="field field--search">
             <label for="q">검색</label>
-            <input id="q" type="search" autocomplete="off" maxlength="60" placeholder="이름, 소속, 접수번호, 전화번호(뒤 4자리 또는 전체)">
+            <input id="q" type="search" autocomplete="off" maxlength="60" placeholder="이름, 소속, 이메일, 접수번호, 전화번호(뒤 4자리 또는 전체)">
           </div>
           <div class="field">
             <span class="field__label" id="lbl-status">상태</span>
@@ -136,6 +149,16 @@
               <span id="includeBothText">22일 참석자에 양일 신청자 포함</span>
             </label>
           </div>
+          <div class="toolbar__group">
+            <div class="field field--select">
+              <label for="fAff">소속 구분</label>
+              <select id="fAff"><option value="">전체</option></select>
+            </div>
+            <div class="field field--select field--select-wide">
+              <label for="fProg">세부 프로그램</label>
+              <select id="fProg"><option value="">전체</option></select>
+            </div>
+          </div>
         </div>
 
         <div class="result-bar">
@@ -151,7 +174,7 @@
                 <th scope="col" class="col-no" data-sort="receiptNo"><button type="button">접수번호</button></th>
                 <th scope="col" class="col-created" data-col="created" data-sort="createdAt"><button type="button">신청일시</button></th>
                 <th scope="col" class="col-name" data-sort="name"><button type="button">이름</button></th>
-                <th scope="col" class="col-org" data-sort="org"><button type="button">소속</button></th>
+                <th scope="col" class="col-org" data-sort="org"><button type="button">소속 구분 · 세부 소속</button></th>
                 <th scope="col" class="col-phone">휴대전화번호</th>
                 <th scope="col" class="col-day" data-sort="day"><button type="button">참석일</button></th>
                 <th scope="col" class="col-status" data-sort="status"><button type="button">상태</button></th>
@@ -222,7 +245,7 @@
               <h2 class="export-card__title" id="xh-badge">명찰 출력용 (.xlsx)</h2>
               <p class="export-card__count tnum" id="cnt-badge">…</p>
             </div>
-            <p id="desc-badge">이름·소속·참석일 세 열, 이름 가나다순. 날짜별 시트(22일 = 22일만 + 양일, 23일 = 23일만 + 양일)로 나눠요. 전화번호는 들어가지 않아요.</p>
+            <p id="desc-badge">이름·소속 구분·세부 소속·참석일 네 열, 이름 가나다순. 날짜별 시트(22일 = 22일만 + 양일, 23일 = 23일만 + 양일)로 나눠요. 전화번호·이메일은 들어가지 않아요.</p>
             <p class="export-card__why" id="why-badge" hidden></p>
             <button type="button" class="btn btn--outline" data-export="badge" aria-describedby="cnt-badge why-badge" disabled>명찰용 엑셀 내려받기</button>
           </article>
@@ -231,7 +254,7 @@
               <h2 class="export-card__title" id="xh-stats">결과보고 통계</h2>
               <p class="export-card__count tnum" id="cnt-stats">…</p>
             </div>
-            <p>위 조건과 상관없이 전체 접수 기준이에요. 참석일별 인원, 유입 경로, 일별 추이와 ‘신청 합계 = 유효 + 취소’ 맞춤 행이 들어 있어요.</p>
+            <p>위 조건과 상관없이 전체 접수 기준이에요. 참석일별·소속 구분별·세부 프로그램별 인원, 유입 경로, 일별 추이와 ‘신청 합계 = 유효 + 취소’ 맞춤 행이 들어 있어요.</p>
             <p class="export-card__why" id="why-stats" hidden></p>
             <div class="export-card__btns">
               <button type="button" class="btn btn--outline" data-export="statsXlsx" aria-describedby="cnt-stats why-stats" disabled>통계 엑셀</button>
@@ -243,7 +266,7 @@
 
         <div class="callout">
           <strong>개인정보 취급 안내</strong>
-          명단 파일에는 휴대전화번호 전체가 들어 있어요. 업무 목적(참가 확인, 안내 문자, 명찰·좌석 준비, 결과보고) 외에는 쓰거나 공유하지 말고,
+          명단 파일에는 휴대전화번호 전체와 이메일 주소가 들어 있어요. 업무 목적(참가 확인, 안내 문자, 행사 자료 이메일 발송, 명찰·좌석 준비, 결과보고) 외에는 쓰거나 공유하지 말고,
           행사 종료 6개월 후 파기해 주세요.
         </div>
 

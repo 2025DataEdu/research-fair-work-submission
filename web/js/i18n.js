@@ -1,5 +1,6 @@
 /* 화면 문구 — 한국어는 명세서 4장 '고객사 양식' 원문을 글자 하나까지 그대로 쓴다.
    ⚠ ko 의 form/intro/days 문구는 수정 금지 (검수 기준: 원문과 글자 단위 일치). 바꾸려면 고객사 승인 필요.
+   2026-11-19 고객사 요청(피드백 2)으로 소속 구분·이메일·참석할 프로그램 문구를 더했다 — 요청 원문 그대로.
    말투: '…해 주세요 / …했어요'. 버튼은 눌렀을 때 일어나는 일 그대로. */
 window.RFW_I18N = {
   ko: {
@@ -24,10 +25,17 @@ window.RFW_I18N = {
     },
     form: {
       lead: "참가를 희망하시는 분은 아래 항목을 작성해 주세요.",
+      mailNotice: "신청하시면 행사 전에 행사 관련 자료를 이메일로 보내 드려요.",   // 피드백 2 — 폼 머리 강조 안내
       name: { label: "이름", hint: "성함을 입력해 주세요.", error: "이름을 입력해 주세요." },
-      org: { label: "소속", hint: "소속 학교·학과 또는 기관·부서명을 입력해 주세요.", error: "소속을 입력해 주세요." },
+      org: {
+        label: "소속", hint: "소속 학교·학과 또는 기관·부서명을 입력해 주세요.", error: "소속을 입력해 주세요.",
+        typeLabel: "소속 구분", typeError: "소속 구분을 선택해 주세요.",   // 피드백 2
+        detailLabel: "세부 소속"
+      },
       phone: { label: "휴대전화번호", placeholder: "예시) 010-1234-5678", error: "휴대전화번호를 확인해 주세요.", hint: "" },  // hint: 영문 전용 — 국문 양식에는 안내 문구 없음 (빈 값이면 표시 안 함)
+      email: { label: "이메일", hint: "행사 전에 행사 관련 자료를 이 주소로 보내 드려요.", placeholder: "예시) name@example.com", error: "이메일 주소를 확인해 주세요." },   // 피드백 2
       day: { label: "참석일", hint: "참석 예정일을 선택해 주세요.", error: "참석일을 선택해 주세요." },
+      programs: { label: "참석할 프로그램", hint: "참석하실 프로그램을 모두 선택해 주세요.", error: "참석하실 프로그램을 날짜별로 하나 이상 선택해 주세요." },   // 피드백 2
       consent: {
         label: "개인정보 수집·이용에 동의합니다.",
         required: "(필수)",
@@ -51,8 +59,8 @@ window.RFW_I18N = {
     privacy: {
       title: "개인정보 수집·이용 안내",
       rows: [
-        ["수집 항목", "이름, 소속, 휴대전화번호, 참석일"],
-        ["수집·이용 목적", "참가 확인, 행사 안내 문자 발송, 명찰·좌석 준비, 결과보고 통계"],
+        ["수집 항목", "이름, 소속(구분·세부 소속), 휴대전화번호, 이메일, 참석일·참석 프로그램"],
+        ["수집·이용 목적", "참가 확인, 행사 안내 문자 발송, 행사 자료 이메일 발송, 명찰·좌석 준비, 결과보고 통계"],
         ["보유·이용 기간", "행사 종료 6개월 후 파기"],
         ["동의 거부 권리", "동의를 거부할 수 있어요. 다만 동의하지 않으면 사전 참가 신청을 할 수 없어요."]
       ]
@@ -63,7 +71,8 @@ window.RFW_I18N = {
     done: {
       title: "신청이 완료됐어요",
       receipt: "접수번호",
-      name: "이름", org: "소속", day: "참석일", when: "일시·장소",
+      name: "이름", org: "소속", email: "이메일", day: "참석일", programs: "참석 프로그램", when: "일시·장소",
+      mail: "행사 전에 {email} 로 행사 자료를 보내 드릴게요.",
       sms: "확인 문자를 보냈어요. 문자 속 링크로 언제든 신청 내용을 수정하거나 취소할 수 있어요.",
       edit: "신청 내용 수정"
     },
@@ -128,10 +137,17 @@ window.RFW_I18N = {
     },
     form: {
       lead: "If you would like to attend, please fill out the form below.",
+      mailNotice: "Once you register, we'll email you the event materials before the event.",
       name: { label: "Name", hint: "Please enter your full name.", error: "Please enter your name." },
-      org: { label: "Affiliation", hint: "Please enter your school/department or organization/division.", error: "Please enter your affiliation." },
+      org: {
+        label: "Affiliation", hint: "Please enter your school/department or organization/division.", error: "Please enter your affiliation.",
+        typeLabel: "Affiliation type", typeError: "Please select your affiliation type.",
+        detailLabel: "Affiliation details"
+      },
       phone: { label: "Mobile phone", placeholder: "e.g. 010-1234-5678", error: "Please check your mobile phone number.", hint: "Korean mobile number (starts with 010)" },
+      email: { label: "Email", hint: "We'll send the event materials to this address before the event.", placeholder: "e.g. name@example.com", error: "Please check your email address." },
       day: { label: "Attendance date", hint: "Please select the day you plan to attend.", error: "Please select an attendance date." },
+      programs: { label: "Sessions you'll attend", hint: "Please select all the sessions you plan to attend.", error: "Please select at least one session for each day." },
       consent: {
         label: "I agree to the collection and use of personal information.",
         required: "(Required)",
@@ -153,8 +169,8 @@ window.RFW_I18N = {
     privacy: {
       title: "Collection and Use of Personal Information",
       rows: [
-        ["Items collected", "Name, affiliation, mobile phone number, attendance date"],
-        ["Purpose", "Confirming attendance, event text messages, name tags and seating, statistics for the final report"],
+        ["Items collected", "Name, affiliation (type and details), mobile phone number, email, attendance date and sessions"],
+        ["Purpose", "Confirming attendance, event text messages, emailing event materials, name tags and seating, statistics for the final report"],
         ["Retention", "Destroyed 6 months after the event"],
         ["Right to refuse", "You may refuse, but you cannot pre-register without agreeing."]
       ]
@@ -163,7 +179,8 @@ window.RFW_I18N = {
     done: {
       title: "You're registered",
       receipt: "Registration No.",
-      name: "Name", org: "Affiliation", day: "Date", when: "When & where",
+      name: "Name", org: "Affiliation", email: "Email", day: "Date", programs: "Sessions", when: "When & where",
+      mail: "We'll send the event materials to {email} before the event.",
       sms: "We sent you a confirmation text. Use the link in it to change or cancel your registration anytime.",
       edit: "Edit registration"
     },

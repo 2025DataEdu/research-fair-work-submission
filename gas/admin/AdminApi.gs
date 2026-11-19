@@ -85,15 +85,27 @@ function adminWhoAmI() {
    - 날짜 범위: 첫 신청·처리일 ~ max(마지막 처리일, min(오늘, 마감일)), 빈 날은 0
    - visits·visitSubmits: 방문집계 탭 전체 날짜 합(경로별 + total). 방문은 api 프로젝트가 시트에 반영한 것까지만
      보인다(그쪽 캐시는 이 프로젝트에서 못 읽음). visitSubmits 는 취소 포함 접수 건수. conversion = 신청 ÷ 방문(방문 0 이면 null)
-   - visitsUpdatedAt: 방문수 마지막 반영 시각(방문집계 G1), 없으면 null */
+   - visitsUpdatedAt: 방문수 마지막 반영 시각(방문집계 G1), 없으면 null
+   - byAff: 유효 신청의 소속 구분별 인원 {id: n, _other: n}. 설정의 구분은 0 이어도 나오고, 설정에 없는 id·빈 값은 _other
+   - byProgram: 유효 신청의 세부 프로그램별 인원 [{id, day, ko, en, count}] 설정 순서(22일 먼저).
+     설정에서 지워진 id 로 신청된 건은 {id, day(d2- 로 시작하면 day2, 아니면 day1), ko: id, en: id, count, removed: true} 로 id 순으로 뒤에 붙인다 */
 function adminGetSummary() {
   return adminRun_(function (me, ss) {
     var regs = readRegs_(ss), cfg = readConfig_(ss), hist = readHistory_(ss);
     var c = countsOf_(regs);
     var src = { sms: 0, qr: 0, web: 0, direct: 0 };
     var perDay = {}, cancelDay = {}, restoreDay = {}, dates = [];
+    var has = function (o, k) { return Object.prototype.hasOwnProperty.call(o, k); };
+    var byAff = { _other: 0 }, progCount = {}, known = {};
+    (cfg.affiliations || []).forEach(function (a) { byAff[a.id] = 0; });
+    ['day1', 'day2'].forEach(function (day) { cfg.program[day].items.forEach(function (it) { known[it.id] = true; }); });
     regs.forEach(function (r) {
-      if (r.status === 'active') src[r.src] = (src[r.src] || 0) + 1;
+      if (r.status === 'active') {
+        src[r.src] = (src[r.src] || 0) + 1;
+        var aff = r.affType && has(byAff, r.affType) && r.affType !== '_other' ? r.affType : '_other';
+        byAff[aff]++;
+        r.programs.forEach(function (id) { progCount[id] = (has(progCount, id) ? progCount[id] : 0) + 1; });
+      }
       var d = r.createdAt.slice(0, 10);
       if (d) { perDay[d] = (perDay[d] || 0) + 1; dates.push(d); }
     });
@@ -120,31 +132,45 @@ function adminGetSummary() {
     var canceled = regs.filter(function (r) { return r.status === 'canceled'; }).length;
     var capOf = function (v) { return cfg.days.filter(function (d) { return d.value === v; })[0].capacity; };
     var vs = readVisitStats_(ss);
+    var byProgram = [];
+    ['day1', 'day2'].forEach(function (day) {
+      cfg.program[day].items.forEach(function (it) {
+        byProgram.push({ id: it.id, day: day, ko: it.ko, en: it.en, count: has(progCount, it.id) ? progCount[it.id] : 0 });
+      });
+    });
+    Object.keys(progCount).sort().forEach(function (id) {       // 설정에서 지워진 id
+      if (!has(known, id)) byProgram.push({ id: id, day: /^d2-/.test(id) ? 'day2' : 'day1', ko: id, en: id, count: progCount[id], removed: true });
+    });
     return {
       total: c.by.day1 + c.by.day2 + c.by.both, canceled: canceled, createdTotal: regs.length, byDay: c.by,
       perDate: { d22: c.d22, d23: c.d23 },
       capacity: { d22: capOf('day1'), d23: capOf('day2') },
-      daily: daily, bySrc: src, open: cfg.open, closeAt: cfg.closeAt, generatedAt: kstIso_(),
+      daily: daily, bySrc: src, byAff: byAff, byProgram: byProgram, open: cfg.open, closeAt: cfg.closeAt, generatedAt: kstIso_(),
       visits: vs.visits, visitSubmits: vs.submits, conversion: conversionOf_(vs.visits, vs.submits),
       visitsDaily: vs.daily, visitsUpdatedAt: vs.updatedAt
     };
   }, '접수 현황을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.');
 }
 
-/* {q, day: all|day1|day2|both|d22|d23, status: active|canceled|all, sort: 'key:asc|desc'} — admin/js/api.js filterRows 와 같음 */
+/* {q, day: all|day1|day2|both|d22|d23, status: active|canceled|all, aff: 소속 구분 id|'', program: 세부 프로그램 id|'',
+    sort: 'key:asc|desc'} — admin/js/api.js filterRows 와 같음. q 는 이름·소속·접수번호·이메일·전화번호에 건다 */
 function adminFilter_(regs, f) {
   f = f || {};
   var q = String(f.q || '').trim().toLowerCase();
   var qDigits = q.replace(/[^0-9]/g, '');
   var phoneLike = /^[0-9\s\-–.]+$/.test(q);
   var day = f.day || 'all', status = f.status || 'active';
+  var aff = String(f.aff || ''), program = String(f.program || '');
   var out = regs.filter(function (r) {
     if (status !== 'all' && r.status !== status) return false;
+    if (aff && r.affType !== aff) return false;
+    if (program && r.programs.indexOf(program) < 0) return false;
     if (day === 'd22' && r.day === 'day2') return false;
     if (day === 'd23' && r.day === 'day1') return false;
     if ((day === 'day1' || day === 'day2' || day === 'both') && r.day !== day) return false;
     if (!q) return true;
-    if (r.name.toLowerCase().indexOf(q) >= 0 || r.org.toLowerCase().indexOf(q) >= 0 || r.receiptNo.toLowerCase().indexOf(q) >= 0) return true;
+    if (r.name.toLowerCase().indexOf(q) >= 0 || r.org.toLowerCase().indexOf(q) >= 0 || r.receiptNo.toLowerCase().indexOf(q) >= 0 ||
+      r.email.toLowerCase().indexOf(q) >= 0) return true;
     // 전화번호: 숫자·하이픈·공백만 있으면 번호로 본다. 4자리는 뒷자리 일치, 5자리 이상은 부분 일치
     if (!phoneLike || qDigits.length < 4) return false;
     return qDigits.length === 4 ? r.phone.slice(-4) === qDigits : r.phone.indexOf(qDigits) >= 0;
@@ -178,11 +204,12 @@ function adminFind_(regs, receiptNo) {
   return r;
 }
 
-/** patch: {name?, org?, phone?, day?} — 관리자는 정원과 무관하게 참석일을 바꿀 수 있다(모의 구현과 같음). */
+/** patch: {name?, affType?, org?, phone?, email?, day?, programs?} — 관리자는 정원과 무관하게 참석일을 바꿀 수 있다(모의 구현과 같음).
+    patch 에 없는 항목은 기존 값을 유지한다. 참석일이나 세부 프로그램이 patch 에 있으면 프로그램을 (새) 참석일 기준으로 다시 검사한다. */
 function adminUpdate(receiptNo, patch) {
   return adminRun_(function (me, ss) {
     return adminLock_(function () {
-      var regs = readRegs_(ss);
+      var regs = readRegs_(ss), cfg = readConfig_(ss);
       var r = adminFind_(regs, receiptNo);
       var src = patch && typeof patch === 'object' ? patch : {};
       var next = {}, fields = {};
@@ -199,6 +226,12 @@ function adminUpdate(receiptNo, patch) {
         }
       }
       if ('day' in src) { if (RFW_DAYS.indexOf(src.day) < 0) fields.day = true; else next.day = src.day; }
+      if ('affType' in src) { if (!affTypeOk_(src.affType, cfg)) fields.affType = true; else next.affType = src.affType; }
+      if ('email' in src) { var e = normEmail_(src.email); if (!emailOk_(e)) fields.email = true; else next.email = e; }
+      if (('programs' in src || 'day' in src) && !fields.day) {
+        var pr = cleanPrograms_('programs' in src ? src.programs : r.programs, next.day || r.day, cfg);
+        if (!pr) fields.programs = true; else next.programs = pr;
+      }
       if (Object.keys(fields).length) throw rfwError_('VALIDATION', '입력값을 확인해 주세요.', { fields: fields });
       if (r.status === 'canceled') throw rfwError_('CANCELED', '취소된 신청은 복원한 뒤 수정할 수 있어요.');
       var diff = diffReg_(r, next);
@@ -278,6 +311,8 @@ function configChanges_(a, b) {
     var ca = capIn(a, x[0]), cb = capIn(b, x[0]);
     if (ca !== cb) out.push(x[1] + ' 정원: ' + cap(ca) + ' → ' + cap(cb));
   });
+  var affLine = affChanges_(a.affiliations || [], b.affiliations || []);
+  if (affLine) out.push(affLine);
   [['day1', '22일'], ['day2', '23일']].forEach(function (x) {
     var ia = (a.program[x[0]] || {}).items || [], ib = (b.program[x[0]] || {}).items || [];
     if (JSON.stringify(ia) === JSON.stringify(ib)) return;
@@ -287,6 +322,26 @@ function configChanges_(a, b) {
   if (JSON.stringify(a.tagline) !== JSON.stringify(b.tagline)) out.push('태그라인 수정');
   if (JSON.stringify(a.contact) !== JSON.stringify(b.contact)) out.push('문의처 수정');
   return out;
+}
+
+/* 소속 구분 변경 요약 — admin/js/api.js affChanges 와 같은 문장. 예) 소속 구분: 추가 연구원 · 이름 수정 학생 → 학부생 · 순서 변경 */
+function affChanges_(aa, ab) {
+  if (JSON.stringify(aa) === JSON.stringify(ab)) return '';
+  function byId(list) { var m = {}; list.forEach(function (x) { m[x.id] = x; }); return m; }
+  function has(m, k) { return Object.prototype.hasOwnProperty.call(m, k); }
+  var ma = byId(aa), mb = byId(ab), parts = [];
+  var added = ab.filter(function (x) { return !has(ma, x.id); }).map(function (x) { return x.ko; });
+  var removed = aa.filter(function (x) { return !has(mb, x.id); }).map(function (x) { return x.ko; });
+  var renamed = ab.filter(function (x) { return has(ma, x.id) && (ma[x.id].ko !== x.ko || ma[x.id].en !== x.en); }).map(function (x) {
+    return ma[x.id].ko !== x.ko ? ma[x.id].ko + ' → ' + x.ko : x.ko + '(영문)';
+  });
+  var keepA = aa.filter(function (x) { return has(mb, x.id); }).map(function (x) { return x.id; }).join(',');
+  var keepB = ab.filter(function (x) { return has(ma, x.id); }).map(function (x) { return x.id; }).join(',');
+  if (added.length) parts.push('추가 ' + added.join(', '));
+  if (removed.length) parts.push('삭제 ' + removed.join(', '));
+  if (renamed.length) parts.push('이름 수정 ' + renamed.join(', '));
+  if (keepA !== keepB) parts.push('순서 변경');
+  return '소속 구분: ' + (parts.length ? parts.join(' · ') : '내용 수정');
 }
 
 /** 화면에서 받은 설정을 저장할 형태로 정리. 형식이 틀리면 VALIDATION. */
@@ -302,20 +357,46 @@ function cleanConfig_(cfg, cur) {
     return Math.floor(n);
   }
   function str(v, max) { return String(v == null ? '' : v).slice(0, max || 200); }
+  var progIds = {};
   function items(day) {
     var list = ((cfg.program[day] || {}).items) || [];
     if (!Array.isArray(list) || list.length > 40) throw bad();
     return list.map(function (it) {
       it = it || {};
+      var id = String(it.id == null ? '' : it.id).trim();     // 빈 id 는 아래 fillProgramIds_ 가 채운다
+      if (id) {
+        if (!RFW_PROG_ID_RE.test(id)) throw rfwError_('VALIDATION', '세부 프로그램 ID 형식이 올바르지 않아요.', { fields: { program: true } });
+        if (Object.prototype.hasOwnProperty.call(progIds, id)) throw rfwError_('VALIDATION', '세부 프로그램 ID가 겹쳐요. 새로고침한 뒤 다시 저장해 주세요.', { fields: { program: true } });
+        progIds[id] = true;
+      }
       return { time: str(it.time, 40), ko: str(it.ko), en: str(it.en), place: str(it.place, 80), placeEn: str(it.placeEn, 80),
-        highlight: !!it.highlight, speaker: str(it.speaker) };
+        highlight: !!it.highlight, speaker: str(it.speaker), id: id };
+    });
+  }
+  /* 소속 구분: 1~20개, id 는 영문 소문자·숫자·-·_ 1~20자로 서로 다르게, 국문 이름 1~30자, 영문 이름 40자 이내. 없으면 지금 값 유지 */
+  function affiliations() {
+    if (cfg.affiliations == null) return clone_(cur.affiliations);
+    var badAff = function () {
+      return rfwError_('VALIDATION', '소속 구분을 확인해 주세요. 1~20개, 국문 이름은 1~30자, 영문 이름은 40자까지예요.',
+        { fields: { affiliations: true } });
+    };
+    var list = cfg.affiliations;
+    if (!Array.isArray(list) || list.length < 1 || list.length > 20) throw badAff();
+    var seen = {};
+    return list.map(function (a) {
+      if (!a || typeof a !== 'object') throw badAff();
+      var id = String(a.id == null ? '' : a.id).trim(), ko = String(a.ko == null ? '' : a.ko).trim(), en = String(a.en == null ? '' : a.en).trim();
+      if (!/^[a-z0-9_-]{1,20}$/.test(id) || id === '_other' || Object.prototype.hasOwnProperty.call(seen, id)) throw badAff();
+      if (!ko || ko.length > 30 || en.length > 40) throw badAff();
+      seen[id] = true;
+      return { id: id, ko: ko, en: en };
     });
   }
   function hdr(day, lang) {
     var h = ((cfg.program[day] || {})[lang]) || cur.program[day][lang] || {};
     return { title: str(h.title, 80), date: str(h.date, 20), dow: str(h.dow, 10) };
   }
-  return {
+  return fillProgramIds_({
     open: !!cfg.open,
     closeAt: str(cfg.closeAt || cur.closeAt, 40),
     showSpeakers: !!cfg.showSpeakers,
@@ -325,13 +406,14 @@ function cleanConfig_(cfg, cur) {
       { value: 'day2', capacity: capIn('day2'), remaining: null },
       { value: 'both', capacity: null, remaining: null }
     ],
+    affiliations: affiliations(),
     program: {
       day1: { ko: hdr('day1', 'ko'), en: hdr('day1', 'en'), items: items('day1') },
       day2: { ko: hdr('day2', 'ko'), en: hdr('day2', 'en'), items: items('day2') }
     },
     contact: { phone: str((cfg.contact || {}).phone, 40), email: str((cfg.contact || {}).email, 80) },
     privacyUrl: str(cfg.privacyUrl == null ? cur.privacyUrl : cfg.privacyUrl, 300)
-  };
+  });
 }
 
 function adminSaveConfig(cfg) {
@@ -396,8 +478,8 @@ function setup() {
 }
 
 /** 보유 기간 만료 후 개인정보 파기 (편집기에서 수동 실행).
-    이름·소속·휴대전화번호·토큰을 비우고 접수번호·일시·상태·참석일·언어·유입경로는 통계용으로 남긴다.
-    변경이력의 이름·소속·번호 변경 내용도 지운다. 되돌릴 수 없으므로 두 겹으로 막는다:
+    이름·소속·휴대전화번호·이메일·토큰을 비우고 접수번호·일시·상태·참석일·언어·유입경로·소속 구분·세부 프로그램은 통계용으로 남긴다.
+    변경이력의 이름·소속·번호·이메일 변경 내용도 지운다. 되돌릴 수 없으므로 두 겹으로 막는다:
     1) 실행 계정이 ADMIN_EMAILS 에 있어야 하고 2) 스크립트 속성 PURGE_CONFIRM = YES 일 때만 실행(실행 후 자동 삭제).
     백업 사본·드라이브 휴지통·내보낸 파일은 따로 지워야 한다. */
 function purgePersonalData() {
@@ -411,13 +493,13 @@ function purgePersonalData() {
   var ss = rfwSpreadsheet_();
   var result = adminLock_(function () {
     var sh = sheet_(ss, RFW_SHEET.REG);
-    var rows = dataRows_(sh, 12), n = 0;
+    var rows = dataRows_(sh, REG_WIDTH), n = 0;
     rows.forEach(function (row) {
       if (!String(row[REG_COL.receiptNo]).trim()) return;
-      row[REG_COL.name] = ''; row[REG_COL.org] = ''; row[REG_COL.phone] = ''; row[REG_COL.token] = '';
+      row[REG_COL.name] = ''; row[REG_COL.org] = ''; row[REG_COL.phone] = ''; row[REG_COL.email] = ''; row[REG_COL.token] = '';
       n++;
     });
-    if (rows.length) sh.getRange(2, 1, rows.length, 12).setValues(rows);
+    if (rows.length) sh.getRange(2, 1, rows.length, REG_WIDTH).setValues(rows);
 
     var hsh = sheet_(ss, RFW_SHEET.HIST);
     var hrows = dataRows_(hsh, 6), hn = 0;
@@ -426,14 +508,14 @@ function purgePersonalData() {
         var o = jsonParse_(cellStr_(row[i]), null);
         if (!o || typeof o !== 'object') return;
         var touched = false;
-        ['name', 'org', 'phone'].forEach(function (k) { if (k in o) { delete o[k]; touched = true; } });
+        ['name', 'org', 'phone', 'email'].forEach(function (k) { if (k in o) { delete o[k]; touched = true; } });
         if (touched) { row[i] = JSON.stringify(o); hn++; }
       });
     });
     if (hrows.length) hsh.getRange(2, 1, hrows.length, 6).setValues(hrows);
     return { rows: n, historyCells: hn };
   });
-  adminLog_(ss, me, '파기', { count: result.rows, detail: '이름·소속·휴대전화번호·토큰 파기, 변경이력 ' + result.historyCells + '칸 정리' });
+  adminLog_(ss, me, '파기', { count: result.rows, detail: '이름·소속·휴대전화번호·이메일·토큰 파기, 변경이력 ' + result.historyCells + '칸 정리' });
   Logger.log('파기했어요: 신청 ' + result.rows + '건, 변경이력 ' + result.historyCells + '칸');
   return result;
 }

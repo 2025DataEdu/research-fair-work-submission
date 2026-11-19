@@ -240,7 +240,14 @@ const kstNow = () => new Date(Date.now() + 9 * 3600000).toISOString();
 const MMDD = kstNow().slice(5, 7) + kstNow().slice(8, 10);
 let phoneSeq = 10000000;
 const newPhone = () => '0105' + String(phoneSeq++).slice(1);   // 01050000000, 01050000001, …
-const person = (o = {}) => Object.assign({ name: '김전북', org: '전북대학교 대학원', phone: newPhone(), day: 'day1', consent: true, lang: 'ko', src: 'web', hp: '' }, o);
+let mailSeq = 0;
+const PROGS = { day1: ['d1-1'], day2: ['d2-1'], both: ['d1-1', 'd2-1'] };   // 참석일마다 고른 세부 프로그램 기본값
+const person = (o = {}) => {
+  const p = Object.assign({ name: '김전북', affType: 'grad', org: '전북대학교 대학원', phone: newPhone(), email: `user${++mailSeq}@example.com`,
+    day: 'day1', consent: true, lang: 'ko', src: 'web', hp: '' }, o);
+  if (!('programs' in o)) p.programs = (PROGS[p.day] || []).slice();
+  return p;
+};
 
 /* =================== 1. 공통 유틸 =================== */
 section('공통 유틸');
@@ -268,7 +275,10 @@ check('GAS_KEY 생성(32자 이상)', (api.props.get('GAS_KEY') || '').length >=
 for (const n of ['신청', '변경이력', '설정', '프로그램', '관리자로그', '방문집계']) {
   check(`탭 ${n} 머리행·고정`, tab(n) && tab(n).get(1, 1) !== '' && tab(n).frozen === 1);
 }
-check('신청 머리행', deepEq(tab('신청').getRange(1, 1, 1, 12).getValues()[0], ['접수번호', '신청일시', '수정일시', '상태', '이름', '소속', '휴대전화번호', '참석일', '개인정보동의시각', '언어', '유입경로', '토큰']));
+check('신청 머리행 15열', deepEq(tab('신청').getRange(1, 1, 1, 15).getValues()[0], ['접수번호', '신청일시', '수정일시', '상태', '이름', '소속', '휴대전화번호', '참석일', '개인정보동의시각', '언어', '유입경로', '토큰', '소속구분', '이메일', '세부프로그램']));
+check('프로그램 머리행 9열(ID)', deepEq(tab('프로그램').getRange(1, 1, 1, 9).getValues()[0], ['날짜', '시간', '국문', '영문', '장소', '장소(영문)', '강조', '연사', 'ID']));
+check('프로그램 ID 기본값', deepEq(tab('프로그램').getRange(2, 9, 6, 1).getValues().map((r) => r[0]), ['d1-1', 'd1-2', 'd1-3', 'd2-1', 'd2-2', 'd2-3']));
+check('설정 affiliations 항목', tab('설정').getRange(2, 1, tab('설정').getLastRow() - 1, 1).getValues().some((r) => r[0] === 'affiliations'));
 const confRows = tab('설정').getLastRow(), progRows = tab('프로그램').getLastRow();
 check('프로그램 기본 6행', progRows === 7, progRows);
 const key1 = api.props.get('GAS_KEY');
@@ -311,15 +321,18 @@ section('config');
 
 /* =================== 5. submit =================== */
 section('submit');
-const p1 = person({ name: '  홍길동 ', phone: '010-1234-5678', day: 'both', src: 'sms' });
+const p1 = person({ name: '  홍길동 ', phone: '010-1234-5678', email: ' Hong.GD@Example.COM ', day: 'both', programs: ['d2-1', 'd1-3', 'd1-1', 'd1-3'], src: 'sms' });
 const s1 = post({ action: 'submit', ...p1 });
 check('신청 성공', s1.ok === true, s1);
 check('접수번호 RF26-MMDD-0001', s1.data.receiptNo === `RF26-${MMDD}-0001`, s1.data.receiptNo);
-check('응답 모양 {receiptNo,name,org,day,token}', deepEq(Object.keys(s1.data).sort(), ['day', 'name', 'org', 'receiptNo', 'token']));
+check('응답 모양 {receiptNo,name,affType,org,email,day,programs,token}', deepEq(Object.keys(s1.data).sort(), ['affType', 'day', 'email', 'name', 'org', 'programs', 'receiptNo', 'token']));
+check('이메일 trim·소문자', s1.data.email === 'hong.gd@example.com', s1.data.email);
+check('세부 프로그램 중복 제거·설정 순서', deepEq(s1.data.programs, ['d1-1', 'd1-3', 'd2-1']), s1.data.programs);
 check('이름 앞뒤 공백 제거', s1.data.name === '홍길동');
 check('토큰 32자 이상', s1.data.token.length >= 32);
 {
-  const row = tab('신청').getRange(2, 1, 1, 12).getValues()[0];
+  const row = tab('신청').getRange(2, 1, 1, 15).getValues()[0];
+  check('시트: 소속구분·이메일·세부프로그램(쉼표)', row[12] === 'grad' && row[13] === 'hong.gd@example.com' && row[14] === 'd1-1,d1-3,d2-1', row.slice(12));
   check('시트: 번호는 0 으로 시작하는 문자열', row[6] === '01012345678', row[6]);
   check('시트: 상태 신청, 시각 +09:00', row[3] === '신청' && /\+09:00$/.test(row[1]), row);
   const v = tab('방문집계').getRange(2, 1, tab('방문집계').getLastRow() - 1, 4).getValues().find((r) => r[1] === 'sms');
@@ -329,12 +342,17 @@ check('토큰 32자 이상', s1.data.token.length >= 32);
 const s2 = post({ action: 'submit', ...person({ phone: '+82 10-1234-5678' }) });
 check('같은 번호(+82 표기) → DUPLICATE', s2.code === 'DUPLICATE', s2);
 const s3 = post({ action: 'submit', name: '', org: 'x'.repeat(61), phone: '010-12', day: 'day9', consent: false });
-check('검증 → VALIDATION + fields 5개', s3.code === 'VALIDATION' && deepEq(s3.fields, { name: true, org: true, phone: true, day: true, consent: true }), s3);
+check('검증 → VALIDATION + fields 7개(참석일이 틀리면 프로그램은 보지 않음)', s3.code === 'VALIDATION' && deepEq(s3.fields, { name: true, affType: true, org: true, phone: true, email: true, day: true, consent: true }), s3);
+const s3b = post({ action: 'submit', ...person({ day: 'day1', programs: ['d2-1'] }) });
+check('다른 날 프로그램 → VALIDATION fields.programs', s3b.code === 'VALIDATION' && deepEq(s3b.fields, { programs: true }), s3b);
 check('오류에 한국어 message', typeof s3.message === 'string' && /[가-힣]/.test(s3.message));
 {
   const before = tab('신청').getLastRow();
   const h = post({ action: 'submit', ...person({ hp: 'http://spam' }) });
   check('허니팟: 성공처럼 응답', h.ok === true && h.data.receiptNo === 'RF26-0000-0000' && h.data.token === '');
+  check('허니팟: 응답 모양 같음', deepEq(Object.keys(h.data).sort(), Object.keys(s1.data).sort()) && Array.isArray(h.data.programs), h.data);
+  const h2 = post({ action: 'submit', hp: 'x' });
+  check('허니팟: 빈 본문도 같은 모양', h2.ok && deepEq(Object.keys(h2.data).sort(), Object.keys(s1.data).sort()) && deepEq(h2.data.programs, []), h2);
   check('허니팟: 저장 안 함', tab('신청').getLastRow() === before);
 }
 const s4 = post({ action: 'submit', ...person({ name: '=HYPERLINK("http://x","y")', org: '+org', src: 'qr' }) });
@@ -347,14 +365,18 @@ section('lookup · update · cancel');
 {
   const t = s1.data.token;
   const l = post({ action: 'lookup', token: t });
-  check('lookup', l.ok && deepEq(l.data, { receiptNo: s1.data.receiptNo, name: '홍길동', org: p1.org, phone: '01012345678', day: 'both', status: 'active' }), l);
+  check('lookup', l.ok && deepEq(l.data, { receiptNo: s1.data.receiptNo, name: '홍길동', affType: 'grad', org: p1.org, phone: '01012345678', email: 'hong.gd@example.com', day: 'both', programs: ['d1-1', 'd1-3', 'd2-1'], status: 'active' }), l);
   check('lookup 틀린 토큰 → INVALID_TOKEN', post({ action: 'lookup', token: 'x'.repeat(43) }).code === 'INVALID_TOKEN');
   check('lookup 짧은 토큰 → INVALID_TOKEN', post({ action: 'lookup', token: '' }).code === 'INVALID_TOKEN');
-  const u = post({ action: 'update', token: t, name: '홍길동', org: '전북대 화학공학과', phone: '01012345678', day: 'day2' });
-  check('update', u.ok && deepEq(u.data, { receiptNo: s1.data.receiptNo, name: '홍길동', org: '전북대 화학공학과', day: 'day2' }), u);
+  const u = post({ action: 'update', token: t, name: '홍길동', affType: 'grad', org: '전북대 화학공학과', phone: '01012345678', email: 'hong.gd@example.com', day: 'day2', programs: ['d2-1'] });
+  check('update', u.ok && deepEq(u.data, { receiptNo: s1.data.receiptNo, name: '홍길동', affType: 'grad', org: '전북대 화학공학과', email: 'hong.gd@example.com', day: 'day2', programs: ['d2-1'] }), u);
   const hist = tab('변경이력').getRange(2, 1, 1, 6).getValues()[0];
-  check('변경이력: 본인 수정, 바뀐 항목만', hist[2] === '본인' && hist[3] === '수정' && deepEq(JSON.parse(hist[5]), { org: '전북대 화학공학과', day: 'day2' }), hist);
-  const uDup = post({ action: 'update', token: t, name: 'a', org: 'b', phone: post({ action: 'lookup', token: s4.data.token }).data.phone, day: 'day2' });
+  check('변경이력: 본인 수정, 바뀐 항목만(프로그램은 쉼표 문자열)', hist[2] === '본인' && hist[3] === '수정' &&
+    deepEq(JSON.parse(hist[4]), { org: p1.org, day: 'both', programs: 'd1-1,d1-3,d2-1' }) &&
+    deepEq(JSON.parse(hist[5]), { org: '전북대 화학공학과', day: 'day2', programs: 'd2-1' }), hist);
+  const uMiss = post({ action: 'update', token: t, name: '홍길동', org: '전북대 화학공학과', phone: '01012345678', day: 'day2' });
+  check('update 새 칸 빠짐 → VALIDATION affType·email·programs', uMiss.code === 'VALIDATION' && deepEq(uMiss.fields, { affType: true, email: true, programs: true }), uMiss);
+  const uDup = post({ action: 'update', token: t, name: 'a', affType: 'grad', org: 'b', phone: post({ action: 'lookup', token: s4.data.token }).data.phone, email: 'a@b.co', day: 'day2', programs: ['d2-1'] });
   check('update 다른 신청 번호 → DUPLICATE', uDup.code === 'DUPLICATE', uDup);
   check('update 검증', post({ action: 'update', token: t, name: '', org: 'b', phone: '010', day: 'x' }).code === 'VALIDATION');
   const c = post({ action: 'cancel', token: t });
@@ -498,7 +520,7 @@ section('설정 · 정원 · 마감');
   check('23일은 신청 가능', post({ action: 'submit', ...person({ day: 'day2' }) }).ok);
   const pc = post({ action: 'config' }).data;
   check('config remaining: day1 0, both 0 (신청 후 캐시 갱신)', pc.days[0].remaining === 0 && pc.days[2].remaining === 0, pc.days);
-  check('정원 찬 날로 update → DAY_FULL', post({ action: 'update', token: regs.b.token, name: 'a', org: 'b', phone: '010-3333-1234', day: 'both' }).code === 'DAY_FULL');
+  check('정원 찬 날로 update → DAY_FULL', post({ action: 'update', token: regs.b.token, name: 'a', affType: 'grad', org: 'b', phone: '010-3333-1234', email: 'b@b.co', day: 'both', programs: ['d1-1', 'd2-1'] }).code === 'DAY_FULL');
   check('정원 찬 날 복원 → DAY_FULL', A('adminRestore', regs.d.receiptNo).code === 'DAY_FULL');
 
   const closed = plain(A('adminGetConfig').data); closed.open = false;
@@ -651,6 +673,276 @@ section('방문·신청 전환 (방문집계 → adminGetSummary)');
   check('개인 정보 없음(숫자·날짜만)', !JSON.stringify({ a: d.visits, b: d.visitSubmits, c: d.visitsDaily }).match(/010|@|김전북/));
 }
 
+/* =================== 15-2. 소속 구분 · 이메일 · 세부 프로그램 (피드백 2) =================== */
+const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+const regRowOf = (no) => { const sh = tab('신청'); for (let r = 2; r <= sh.getLastRow(); r++) if (sh.get(r, 1) === no) return r; return 0; };
+function setRegCells(no, values) {      // {열번호(1부터): 값} — 사람이 시트를 고친 것처럼
+  const r = regRowOf(no);
+  shared.locksHeld++;
+  try { for (const [c, v] of Object.entries(values)) tab('신청').getRange(r, Number(c)).setValue(v); } finally { shared.locksHeld--; }
+}
+
+section('검증 규칙: 소속 구분 · 이메일 · 세부 프로그램');
+{
+  const c = api.ctx;
+  const cfg = plain(c.RFW_DEFAULT_CONFIG);
+  const base = { name: '김', affType: 'grad', org: 'x', phone: '01012345678', email: 'a@example.com', day: 'day1', programs: ['d1-1'], consent: true };
+  const v = (o, conf = cfg) => plain(c.validateReg_(Object.assign({}, base, o), true, conf));
+  check('기본 통과', v({}) === null, v({}));
+  check('소속 구분 없음 → affType', deepEq(v({ affType: undefined }), { affType: true }));
+  check('소속 구분 빈 값 → affType', deepEq(v({ affType: '' }), { affType: true }));
+  check('설정에 없는 소속 구분 → affType', deepEq(v({ affType: 'alien' }), { affType: true }));
+  check('소속 구분 _other → affType', deepEq(v({ affType: '_other' }), { affType: true }));
+  for (const e of ['', 'no-at', 'a@b', 'a@b.c', 'a b@c.com', 'a@@b.com', 'x'.repeat(95) + '@a.com']) {
+    check(`이메일 틀림 ${JSON.stringify(e.slice(0, 20))} → email`, deepEq(v({ email: e }), { email: true }));
+  }
+  check('이메일 없음 → email', deepEq(v({ email: undefined }), { email: true }));
+  check('이메일 앞뒤 공백·대문자 허용', v({ email: '  Kim.JB@JBNU.ac.kr ' }) === null);
+  check('이메일 100자 허용', v({ email: 'x'.repeat(94) + '@a.com' }) === null);
+  check('고른 날 프로그램 없음([]) → programs', deepEq(v({ programs: [] }), { programs: true }));
+  check('프로그램 칸 없음 → programs', deepEq(v({ programs: undefined }), { programs: true }));
+  check('다른 날 프로그램만 → programs', deepEq(v({ programs: ['d2-1'] }), { programs: true }));
+  check('다른 날 프로그램 섞임 → programs', deepEq(v({ programs: ['d1-1', 'd2-1'] }), { programs: true }));
+  check('없는 프로그램 id → programs', deepEq(v({ programs: ['d1-1', 'nope'] }), { programs: true }));
+  check('배열 아님 → programs', deepEq(v({ programs: 'd1-1' }), { programs: true }));
+  check('문자열 아닌 원소 → programs', deepEq(v({ programs: [1] }), { programs: true }));
+  check('양일: 22일 것만 → programs', deepEq(v({ day: 'both', programs: ['d1-1'] }), { programs: true }));
+  check('양일: 23일 것만 → programs', deepEq(v({ day: 'both', programs: ['d2-2'] }), { programs: true }));
+  check('양일: 날마다 하나씩 → 통과', v({ day: 'both', programs: ['d1-2', 'd2-3'] }) === null);
+  check('23일: 23일 것 여러 개 → 통과', v({ day: 'day2', programs: ['d2-3', 'd2-1'] }) === null);
+  const noDay2 = plain(cfg); noDay2.program.day2.items = [];
+  check('항목 없는 날(23일): 빈 선택 통과', v({ day: 'day2', programs: [] }, noDay2) === null);
+  check('항목 없는 날(23일): 프로그램 칸 없어도 통과', v({ day: 'day2', programs: undefined }, noDay2) === null);
+  check('항목 없는 날(23일): 지워진 id → programs', deepEq(v({ day: 'day2', programs: ['d2-1'] }, noDay2), { programs: true }));
+  check('양일 + 23일 항목 없음: 22일 것 하나면 통과', v({ day: 'both', programs: ['d1-1'] }, noDay2) === null);
+  check('양일 + 23일 항목 없음: 22일 것도 없으면 → programs', deepEq(v({ day: 'both', programs: [] }, noDay2), { programs: true }));
+  check('cleanPrograms_: 중복 제거·설정 순서(22일 먼저)', deepEq(plain(c.cleanPrograms_(['d2-2', 'd1-3', 'd1-1', 'd1-3'], 'both', cfg)), ['d1-1', 'd1-3', 'd2-2']));
+  check('maskEmail_', c.maskEmail_('abcd@example.com') === 'ab***@example.com' && c.maskEmail_('a@x.com') === 'a***@x.com' && c.maskEmail_('') === '');
+  const r = post({ action: 'submit', ...person({ day: 'both', programs: [] }) });
+  check('API submit: 양일 프로그램 없음 → VALIDATION programs', r.code === 'VALIDATION' && deepEq(r.fields, { programs: true }), r);
+  const r2 = post({ action: 'submit', ...person({ affType: 'nope', email: 'nope' }) });
+  check('API submit: 소속 구분·이메일 → VALIDATION', r2.code === 'VALIDATION' && deepEq(r2.fields, { affType: true, email: true }), r2);
+}
+
+section('옛 시트 이전(setup) · 프로그램 ID 대체값 · writeConfig_ id 채움');
+{
+  const c = api.ctx;
+  const old = new FakeBook('sheet-old', '옛 시트');
+  const put = (sh, r, vals) => vals.forEach((v, j) => sh.set(r, j + 1, v));
+  const reg = old.insertSheet('신청');
+  reg.formats.push({ r1: 1, r2: 1000, c1: 1, c2: 12, f: '@' });
+  put(reg, 1, ['접수번호', '신청일시', '수정일시', '상태', '이름', '소속', '휴대전화번호', '참석일', '개인정보동의시각', '언어', '유입경로', '토큰']);
+  put(reg, 2, ['RF26-1201-0001', '2026-12-01T10:00:00+09:00', '2026-12-01T10:00:00+09:00', '신청', '옛사람', '옛소속', '01077778888', 'day1',
+    '2026-12-01T10:00:00+09:00', 'ko', 'web', 'x'.repeat(43)]);
+  const prog = old.insertSheet('프로그램');
+  prog.formats.push({ r1: 1, r2: 1000, c1: 1, c2: 8, f: '@' });
+  put(prog, 1, ['날짜', '시간', '국문', '영문', '장소', '장소(영문)', '강조', '연사']);
+  put(prog, 2, ['day1', '10:00', '가', 'A', '진수당', 'J', 'TRUE', '']);
+  put(prog, 3, ['day1', '', '나', 'B', '진수당', 'J', 'FALSE', '', 'd1-keep']);   // 누군가 ID 를 손으로 넣은 행
+  put(prog, 4, ['day2', '', '다', 'C', '진수당', 'J', 'FALSE', '']);
+  put(prog, 5, ['day1', '', '라', 'D', '진수당', 'J', 'FALSE', '']);
+  const conf = old.insertSheet('설정');
+  put(conf, 1, ['항목', '값', '설명']);
+  put(conf, 2, ['open', 'true', '접수 받기']);
+
+  const ids = (cfg) => ['day1', 'day2'].map((d) => cfg.program[d].items.map((it) => it.id));
+  const before = plain(c.readConfig_(old));
+  check('readConfig_: 빈 ID 는 그날 안 순서로 d1-1… (손으로 넣은 ID 는 그대로)', deepEq(ids(before), [['d1-1', 'd1-keep', 'd1-3'], ['d2-1']]), ids(before));
+  check('readConfig_: affiliations 항목 없으면 기본값', deepEq(before.affiliations, plain(c.RFW_DEFAULT_CONFIG.affiliations)));
+  const oldReg = plain(c.readRegs_(old))[0];
+  check('옛 신청 행: affType "", email "", programs []', oldReg.affType === '' && oldReg.email === '' && deepEq(oldReg.programs, []) && oldReg.name === '옛사람', oldReg);
+
+  const made = plain(c.setupSheets_(old));
+  check('setup: 신청 머리행 뒤에 3열', deepEq(reg.getRange(1, 1, 1, 15).getValues()[0].slice(11), ['토큰', '소속구분', '이메일', '세부프로그램']), reg.getRange(1, 1, 1, 15).getValues()[0]);
+  check('setup: 프로그램 머리행 뒤에 ID', prog.get(1, 9) === 'ID');
+  check('setup: 빈 ID 칸 채움(그날 안 순서)', deepEq(prog.getRange(2, 9, 4, 1).getValues().map((r) => r[0]), ['d1-1', 'd1-keep', 'd2-1', 'd1-3']));
+  check('setup: 새 열도 글자 서식', reg.fmt(2, 15) === '@' && prog.fmt(2, 9) === '@');
+  check('setup: 설정에 affiliations 행 추가', conf.get(3, 1) === 'affiliations' && deepEq(JSON.parse(conf.get(3, 2)), plain(c.RFW_DEFAULT_CONFIG.affiliations)));
+  check('setup: 한 일 기록', made.some((m) => /신청 탭 열 추가/.test(m)) && made.some((m) => /프로그램 ID 3칸/.test(m)) && made.some((m) => /affiliations/.test(m)), made);
+  check('setup: 옛 신청 행 데이터 그대로', deepEq(reg.getRange(2, 1, 1, 12).getValues()[0].slice(0, 5), ['RF26-1201-0001', '2026-12-01T10:00:00+09:00', '2026-12-01T10:00:00+09:00', '신청', '옛사람']));
+  check('setup: 이전 뒤 id 가 이전 전 대체값과 같음', deepEq(ids(plain(c.readConfig_(old))), ids(before)));
+  check('setup: 설정·프로그램 기본값으로 덮어쓰지 않음', prog.get(2, 3) === '가' && conf.get(2, 1) === 'open');
+  const snap = JSON.stringify([[...reg.cells], [...prog.cells], [...conf.cells]]);
+  const made2 = plain(c.setupSheets_(old));
+  check('setup 다시 실행: 바뀌는 것 없음', made2.length === 0 && JSON.stringify([[...reg.cells], [...prog.cells], [...conf.cells]]) === snap, made2);
+
+  // writeConfig_: id 가 빈 항목을 채우고(cfg 도 같이), 9열로 쓴다
+  const cfg = c.readConfig_(old);
+  cfg.program.day2.items.push({ time: '', ko: '새 항목', en: 'New', place: '', placeEn: '', highlight: false, speaker: '', id: '' });
+  c.writeConfig_(old, cfg, false);
+  const newId = cfg.program.day2.items[1].id;
+  check('writeConfig_: 빈 id → d2- + base36 4~6자', /^d2-[0-9a-z]{4,6}$/.test(newId), newId);
+  const back = plain(c.readConfig_(old));
+  check('writeConfig_ → readConfig_: id 유지', deepEq(ids(back), [['d1-1', 'd1-keep', 'd1-3'], ['d2-1', newId]]), ids(back));
+  const ids2 = {}; for (let i = 0; i < 200; i++) { const x = c.newProgramId_('day1', ids2); ids2[x] = true; }
+  check('newProgramId_: 겹치지 않음·형식', Object.keys(ids2).length === 200 && Object.keys(ids2).every((x) => /^d1-[0-9a-z]{4,6}$/.test(x)));
+}
+
+section('옛 신청 건 본인 수정: 새 칸을 채워야 저장');
+{
+  const leg = post({ action: 'submit', ...person({ day: 'day2', email: 'legacy@example.com' }) }).data;
+  setRegCells(leg.receiptNo, { 13: '', 14: '', 15: '' });
+  const l = post({ action: 'lookup', token: leg.token }).data;
+  check('새 칸이 빈 신청 lookup: "" / []', l.affType === '' && l.email === '' && deepEq(l.programs, []), l);
+  const bad = post({ action: 'update', token: leg.token, name: l.name, org: l.org, phone: l.phone, day: 'day2' });
+  check('옛 모양 update → VALIDATION affType·email·programs', bad.code === 'VALIDATION' && deepEq(bad.fields, { affType: true, email: true, programs: true }), bad);
+  const ok = post({ action: 'update', token: leg.token, name: l.name, affType: 'prof', org: l.org, phone: l.phone, email: 'New.Mail@Example.com', day: 'day2', programs: ['d2-2'] });
+  check('채워서 update → 저장', ok.ok && ok.data.affType === 'prof' && ok.data.email === 'new.mail@example.com' && deepEq(ok.data.programs, ['d2-2']), ok);
+  const h = A('adminHistory', leg.receiptNo).data[0];
+  check('변경이력: 이메일 가림, 프로그램 쉼표 문자열', deepEq(h.before, { affType: '', email: '', programs: '' }) && deepEq(h.after, { affType: 'prof', email: 'ne***@example.com', programs: 'd2-2' }), h);
+}
+
+section('adminGetSummary byAff · byProgram, adminList aff · program · 이메일 검색');
+{
+  const cfg = A('adminGetConfig').data;
+  const expect = (rows) => {
+    const aff = { _other: 0 }; cfg.affiliations.forEach((a) => { aff[a.id] = 0; });
+    const pc = {};
+    rows.forEach((r) => {
+      const k = r.affType && hasOwn(aff, r.affType) && r.affType !== '_other' ? r.affType : '_other';
+      aff[k]++;
+      r.programs.forEach((id) => { pc[id] = (pc[id] || 0) + 1; });
+    });
+    const prog = [];
+    ['day1', 'day2'].forEach((d) => cfg.program[d].items.forEach((it) => prog.push({ id: it.id, day: d, ko: it.ko, en: it.en, count: pc[it.id] || 0 })));
+    return { aff, prog };
+  };
+  const s0 = A('adminGetSummary').data;
+  const e0 = expect(A('adminList', {}).data.rows);
+  check('byAff = 유효 신청 소속 구분별(설정 구분 0 포함, _other)', deepEq(s0.byAff, e0.aff), { got: s0.byAff, want: e0.aff });
+  check('byProgram = 설정 순서·유효 신청 기준', deepEq(s0.byProgram, e0.prog), { got: s0.byProgram, want: e0.prog });
+  check('byProgram 순서 = 설정 순서(22일 먼저)', deepEq(s0.byProgram.map((p) => p.id), ['day1', 'day2'].flatMap((d) => cfg.program[d].items.map((it) => it.id))));
+
+  const mk = (o) => post({ action: 'submit', ...person(o) }).data;
+  mk({ affType: 'prof', day: 'day1', programs: ['d1-2', 'd1-3'] });
+  mk({ affType: 'prof', day: 'day1', programs: ['d1-3', 'd1-2'] });
+  const st = mk({ affType: 'student', day: 'both', programs: ['d1-2', 'd2-2'], email: 'Unique.Search@Example.org' });
+  const cx = mk({ affType: 'prof', day: 'day1', programs: ['d1-2'] });
+  post({ action: 'cancel', token: cx.token });
+  const s1x = A('adminGetSummary').data;
+  const cnt = (s, id) => s.byProgram.find((p) => p.id === id).count;
+  check('byAff: 취소 제외하고 더해짐', s1x.byAff.prof === s0.byAff.prof + 2 && s1x.byAff.student === s0.byAff.student + 1, { before: s0.byAff, after: s1x.byAff });
+  check('byProgram: 취소 제외하고 더해짐', cnt(s1x, 'd1-2') === cnt(s0, 'd1-2') + 3 && cnt(s1x, 'd1-3') === cnt(s0, 'd1-3') + 2 && cnt(s1x, 'd2-2') === cnt(s0, 'd2-2') + 1);
+
+  // 설정에 없는 소속 구분·빈 값 → _other, 설정에서 지워진 프로그램 id → removed
+  setRegCells(st.receiptNo, { 13: '', 15: 'd1-2,d2-gone,d2-2' });
+  const s2x = A('adminGetSummary').data;
+  check('빈 소속 구분 → _other', s2x.byAff._other === s1x.byAff._other + 1 && s2x.byAff.student === s1x.byAff.student - 1, s2x.byAff);
+  const last = s2x.byProgram[s2x.byProgram.length - 1];
+  check('지워진 프로그램 id → removed 로 뒤에', deepEq(last, { id: 'd2-gone', day: 'day2', ko: 'd2-gone', en: 'd2-gone', count: 1, removed: true }), last);
+  setRegCells(st.receiptNo, { 13: 'student', 15: 'd1-2,d2-2' });
+  check('되돌리면 removed 없음', !A('adminGetSummary').data.byProgram.some((p) => p.removed));
+
+  const L = (f) => A('adminList', f).data;
+  check('adminList aff 필터', L({ aff: 'prof' }).total === s1x.byAff.prof && L({ aff: 'prof' }).rows.every((r) => r.affType === 'prof'));
+  check('adminList aff + 상태 전체 = 신청 + 취소', L({ aff: 'prof', status: 'all' }).total === L({ aff: 'prof' }).total + L({ aff: 'prof', status: 'canceled' }).total && L({ aff: 'prof', status: 'canceled' }).total >= 1);
+  check('adminList program 필터', L({ program: 'd1-2' }).total === cnt(s1x, 'd1-2') && L({ program: 'd1-2' }).rows.every((r) => r.programs.includes('d1-2')));
+  check('adminList aff + program', deepEq(L({ aff: 'student', program: 'd2-2' }).rows.map((r) => r.receiptNo).filter((n) => n === st.receiptNo), [st.receiptNo]));
+  check('adminList 빈 필터 = 전체', L({ aff: '', program: '' }).total === L({}).total);
+  check('adminList 이메일 검색(대소문자 무시)', L({ q: 'UNIQUE.SEARCH@' }).total === 1 && L({ q: 'unique.search' }).rows[0].receiptNo === st.receiptNo);
+  const row = L({ q: st.receiptNo }).rows[0];
+  check('목록 행: 이메일 원문·programs 배열·affType', row.email === 'unique.search@example.org' && deepEq(row.programs, ['d1-2', 'd2-2']) && row.affType === 'student', row);
+  const x = A('adminLogExport', 'csv', { q: st.receiptNo }).data.rows[0];
+  check('내보내기 행: affType·email·programs', x.affType === 'student' && x.email === 'unique.search@example.org' && deepEq(x.programs, ['d1-2', 'd2-2']) && /^010-/.test(x.phone), x);
+}
+
+section('adminUpdate: 소속 구분 · 이메일 · 세부 프로그램');
+{
+  const t = post({ action: 'submit', ...person({ day: 'day1', programs: ['d1-1'], email: 'abcd@example.com' }) }).data;
+  const U = (patch) => A('adminUpdate', t.receiptNo, patch);
+  const fieldsOf = (r) => r.code === 'VALIDATION' ? r.fields : r;
+  check('affType 틀림 → fields.affType', deepEq(fieldsOf(U({ affType: 'alien' })), { affType: true }));
+  check('email 틀림 → fields.email', deepEq(fieldsOf(U({ email: 'bad' })), { email: true }));
+  check('programs 다른 날 → fields.programs', deepEq(fieldsOf(U({ programs: ['d2-1'] })), { programs: true }));
+  check('programs 빈 배열 → fields.programs', deepEq(fieldsOf(U({ programs: [] })), { programs: true }));
+  check('참석일만 바꿔 기존 프로그램이 안 맞음 → fields.programs', deepEq(fieldsOf(U({ day: 'day2' })), { programs: true }));
+  check('참석일 틀리면 프로그램은 보지 않음', deepEq(fieldsOf(U({ day: 'day9', programs: ['x'] })), { day: true }));
+  const n = U({ name: '새이름' });
+  check('patch 에 없는 새 칸은 기존 값 유지', n.ok && n.data.affType === 'grad' && n.data.email === 'abcd@example.com' && deepEq(n.data.programs, ['d1-1']), n);
+  const u = U({ affType: 'prof', email: ' NEW.Mail@Example.com ', programs: ['d1-3', 'd1-1'] });
+  check('관리자 수정: 소속 구분·이메일(소문자)·프로그램(정렬)', u.ok && u.data.affType === 'prof' && u.data.email === 'new.mail@example.com' && deepEq(u.data.programs, ['d1-1', 'd1-3']), u);
+  const h = A('adminHistory', t.receiptNo).data[0];
+  check('변경이력: 이메일 가림·프로그램 쉼표', deepEq(h.before, { affType: 'grad', email: 'ab***@example.com', programs: 'd1-1' }) &&
+    deepEq(h.after, { affType: 'prof', email: 'ne***@example.com', programs: 'd1-1,d1-3' }), h);
+  const histText = JSON.stringify(tab('변경이력').getRange(2, 1, tab('변경이력').getLastRow() - 1, 6).getValues());
+  check('변경이력 시트에 이메일 원문 없음', !histText.includes('abcd@example.com') && !histText.includes('new.mail@example.com'));
+  check('참석일 + 프로그램 같이 바꾸기', U({ day: 'both', programs: ['d2-3', 'd1-1'] }).data.day === 'both');
+  check('양일 → 22일, 프로그램에 23일 것이 남으면 → fields.programs', deepEq(fieldsOf(U({ day: 'day1' })), { programs: true }));
+  const d1 = U({ day: 'day1', programs: ['d1-1'] });
+  check('22일 + 22일 프로그램 → 저장', d1.ok && d1.data.day === 'day1' && deepEq(d1.data.programs, ['d1-1']), d1);
+  const nHist = A('adminHistory', t.receiptNo).data.length;
+  check('같은 값(프로그램 순서만 다름)이면 이력 안 남김', U({ programs: ['d1-1', 'd1-1'] }).ok && A('adminHistory', t.receiptNo).data.length === nHist);
+}
+
+section('설정: 소속 구분 · 세부 프로그램 ID (adminSaveConfig)');
+{
+  const g = () => plain(A('adminGetConfig').data);
+  const cur = g();
+  check('adminGetConfig: 소속 구분 기본값', deepEq(cur.affiliations, plain(api.ctx.RFW_DEFAULT_CONFIG.affiliations)));
+  check('adminGetConfig: 모든 항목에 id', ['day1', 'day2'].every((d) => cur.program[d].items.every((it) => it.id)));
+  const nLog = A('adminConfigLog').data.length;
+  const affBad = (affs, label) => {
+    const c = g(); c.affiliations = affs;
+    const r = A('adminSaveConfig', c);
+    check('소속 구분 검증: ' + label, r.code === 'VALIDATION' && deepEq(r.fields, { affiliations: true }) && /[가-힣]/.test(r.message), r);
+  };
+  const A1 = (o) => Object.assign({ id: 'a', ko: '가', en: 'A' }, o);
+  affBad('x', '배열 아님');
+  affBad([], '0개');
+  affBad(Array.from({ length: 21 }, (_, i) => A1({ id: 'a' + i })), '21개');
+  affBad([A1({ id: 'Bad ID' })], 'id 형식');
+  affBad([A1({ id: 'x'.repeat(21) })], 'id 21자');
+  affBad([A1({ id: '_other' })], 'id _other(집계용 예약)');
+  affBad([A1(), A1({ ko: '나' })], 'id 중복');
+  affBad([A1({ ko: '  ' })], '국문 이름 빈 값');
+  affBad([A1({ ko: '가'.repeat(31) })], '국문 이름 31자');
+  affBad([A1({ en: 'e'.repeat(41) })], '영문 이름 41자');
+  affBad([null], '항목이 객체 아님');
+  {
+    const c = g(); c.program.day2.items[0].id = 'd1-1';
+    const r = A('adminSaveConfig', c);
+    check('프로그램 id 중복 → VALIDATION', r.code === 'VALIDATION' && deepEq(r.fields, { program: true }), r);
+    const c2 = g(); c2.program.day1.items[0].id = 'd1,1';
+    check('프로그램 id 에 쉼표 → VALIDATION', A('adminSaveConfig', c2).code === 'VALIDATION');
+  }
+  check('실패한 저장은 기록 없음', A('adminConfigLog').data.length === nLog);
+  check('20개·영문 빈 값은 허용', (() => { const c = g(); c.affiliations = Array.from({ length: 20 }, (_, i) => A1({ id: 'a' + i, en: '' })); const r = A('adminSaveConfig', c); A('adminSaveConfig', cur); return r.ok && r.data.affiliations.length === 20; })());
+  const nLog2 = A('adminConfigLog').data.length;
+
+  const c = g();
+  c.affiliations.push({ id: 'staff', ko: ' 직원 ', en: 'Staff' });
+  c.affiliations.find((a) => a.id === 'student').ko = '학부생';
+  c.program.day1.items.push({ time: '', ko: '새 세션', en: 'New Session', place: '진수당', placeEn: 'Jinsudang', highlight: false, speaker: '' });
+  c.program.day1.items[1].ko = '컨퍼런스 세션';
+  const s = A('adminSaveConfig', c);
+  check('저장: 소속 구분 6개(앞뒤 공백 정리)', s.ok && s.data.affiliations.length === 6 && s.data.affiliations[5].ko === '직원', s);
+  const newId = s.data.program.day1.items[3].id;
+  check('저장: 새 항목 id 채움(d1- + base36)', /^d1-[0-9a-z]{4,6}$/.test(newId), newId);
+  check('저장: 이름 바꾼 항목 id 유지', s.data.program.day1.items[1].id === 'd1-2' && s.data.program.day1.items[1].ko === '컨퍼런스 세션');
+  check('저장: 시트 프로그램 탭 ID 열', tab('프로그램').getRange(2, 9, 4, 1).getValues().map((r) => r[0]).join() === ['d1-1', 'd1-2', 'd1-3', newId].join());
+  const log = A('adminConfigLog').data;
+  check('설정변경 기록: 소속 구분 요약(정원 다음, 세부 프로그램 앞)', log.length === nLog2 + 1 &&
+    deepEq(log[0].changes, ['소속 구분: 추가 직원 · 이름 수정 학생 → 학부생', '세부 프로그램(22일): 항목 3개 → 4개']), log[0]);
+  api.cache.clear();
+  const pc = post({ action: 'config' }).data;
+  check('참가자 config: 소속 구분·새 프로그램 id 반영', pc.affiliations.length === 6 && pc.affiliations[5].id === 'staff' && pc.program.day1.items[3].id === newId, pc.affiliations);
+  const sub = post({ action: 'submit', ...person({ affType: 'staff', day: 'day1', programs: [newId] }) });
+  check('새 소속 구분·새 프로그램으로 신청', sub.ok && sub.data.affType === 'staff' && deepEq(sub.data.programs, [newId]), sub);
+
+  const c3 = g(); c3.affiliations = [c3.affiliations[1], c3.affiliations[0]].concat(c3.affiliations.slice(2));
+  A('adminSaveConfig', c3);
+  check('설정변경 기록: 순서 변경', deepEq(A('adminConfigLog').data[0].changes, ['소속 구분: 순서 변경']), A('adminConfigLog').data[0]);
+  const c4 = g(); c4.affiliations = c4.affiliations.filter((a) => a.id !== 'staff'); c4.affiliations.find((a) => a.id === 'prof').en = 'Professor';
+  A('adminSaveConfig', c4);
+  check('설정변경 기록: 삭제 · 영문 이름 수정', deepEq(A('adminConfigLog').data[0].changes, ['소속 구분: 삭제 직원 · 이름 수정 교수(영문)']), A('adminConfigLog').data[0]);
+  const sum = A('adminGetSummary').data;
+  check('지운 소속 구분으로 신청한 건 → _other', !('staff' in sum.byAff) && sum.byAff._other >= 1, sum.byAff);
+  const c5 = g(); delete c5.affiliations;
+  const r5 = A('adminSaveConfig', c5);
+  check('affiliations 없이 저장하면 지금 값 유지', r5.ok && r5.data.affiliations.length === 5 && r5.data.affiliations[0].id === 'grad');
+  A('adminSaveConfig', Object.assign(g(), { affiliations: cur.affiliations }));
+}
+
 /* =================== 16. 트리거·백업 =================== */
 section('트리거 · 백업');
 {
@@ -675,10 +967,13 @@ section('purgePersonalData');
   const after = A('adminGetSummary').data;
   check('파기 후 통계 유지', after.total === before.total && after.createdTotal === before.createdTotal && deepEq(after.perDate, before.perDate));
   const rows = A('adminList', { status: 'all' }).data.rows;
-  check('파기 후 이름·소속·번호 비어 있음', rows.every((r) => r.name === '' && r.org === '' && r.phoneMasked === ''));
+  check('파기 후 이름·소속·번호·이메일 비어 있음', rows.every((r) => r.name === '' && r.org === '' && r.phoneMasked === '' && r.email === ''));
+  check('파기 후 소속 구분·세부 프로그램은 통계용으로 남음', rows.some((r) => r.affType && r.programs.length));
   check('파기 후 토큰 무효', post({ action: 'lookup', token: s4.data.token }).code === 'INVALID_TOKEN');
   const h = A('adminHistory', regs.a.receiptNo).data;
   check('파기 후 이력에서 이름·소속·번호 지움', h.every((x) => !('phone' in x.before) && !('org' in x.after)), h);
+  const allHist = tab('변경이력').getRange(2, 1, tab('변경이력').getLastRow() - 1, 6).getValues();
+  check('파기 후 이력에서 이메일 지움', allHist.every((row) => !/"email"/.test(row[4]) && !/"email"/.test(row[5])));
   check('파기 기록', A('adminAccessLog').data.length >= 1 && tab('관리자로그').getRange(tab('관리자로그').getLastRow(), 3).getValues()[0][0] === '파기');
 }
 

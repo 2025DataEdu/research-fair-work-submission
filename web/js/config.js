@@ -33,24 +33,33 @@ window.RFW_CONFIG = {
     { value: "day2", capacity: null, remaining: null },
     { value: "both", capacity: null, remaining: null }
   ],
-  // 이틀 프로그램 안내 (안내용, 확정 전)
+  // 소속 구분 — 순서 = 화면 순서. 관리자 '설정'에서 수정. id 는 저장값이라 바꾸지 않는다.
+  affiliations: [
+    { id: "group", ko: "교육연구단", en: "BK21 Research Group" },
+    { id: "grad", ko: "대학원", en: "Graduate School" },
+    { id: "prof", ko: "교수", en: "Faculty" },
+    { id: "student", ko: "학생", en: "Student" },
+    { id: "external", ko: "외부참여자", en: "External Participant" }
+  ],
+  // 이틀 프로그램 안내 (확정 전). 신청 폼의 '참석할 프로그램' 선택지도 이 items 를 그대로 쓴다.
+  // id: 세부 프로그램 저장·집계 기준 — 한 번 정해지면 이름을 바꿔도 유지(새 항목은 d1-/d2- + 무작위 4~6자)
   program: {
     day1: {
       ko: { title: "리서치 컨퍼런스", date: "12. 22.", dow: "Tue" },
       en: { title: "Research Conference", date: "12. 22.", dow: "Tue" },
       items: [
-        { time: "13:00~14:05", ko: "개막식·기조강연", en: "Opening Ceremony & Keynote", place: "진수당", placeEn: "Jinsudang", highlight: true, speaker: "" },
-        { time: "14:30~17:30", ko: "컨퍼런스 Session 1·2", en: "Conference Sessions 1 & 2", place: "진수당", placeEn: "Jinsudang", highlight: true, speaker: "" },
-        { time: "", ko: "외국인 유학생 특강", en: "Special Lecture for International Students", place: "진수당", placeEn: "Jinsudang", highlight: false, speaker: "" }
+        { id: "d1-1", time: "13:00~14:05", ko: "개막식·기조강연", en: "Opening Ceremony & Keynote", place: "진수당", placeEn: "Jinsudang", highlight: true, speaker: "" },
+        { id: "d1-2", time: "14:30~17:30", ko: "컨퍼런스 Session 1·2", en: "Conference Sessions 1 & 2", place: "진수당", placeEn: "Jinsudang", highlight: true, speaker: "" },
+        { id: "d1-3", time: "", ko: "외국인 유학생 특강", en: "Special Lecture for International Students", place: "진수당", placeEn: "Jinsudang", highlight: false, speaker: "" }
       ]
     },
     day2: {
       ko: { title: "BK21 성과공유회", date: "12. 23.", dow: "Wed" },
       en: { title: "BK21 Achievement Sharing", date: "12. 23.", dow: "Wed" },
       items: [
-        { time: "", ko: "BK21 4단계 성과공유회", en: "BK21 Phase 4 Achievement Sharing", place: "진수당", placeEn: "Jinsudang", highlight: true, speaker: "" },
-        { time: "", ko: "대학원생 토크콘서트", en: "Graduate Student Talk Concert", place: "진수당", placeEn: "Jinsudang", highlight: false, speaker: "" },
-        { time: "", ko: "교육연구단 학술행사", en: "Research Group Academic Sessions", place: "진수당", placeEn: "Jinsudang", highlight: false, speaker: "" }
+        { id: "d2-1", time: "", ko: "BK21 4단계 성과공유회", en: "BK21 Phase 4 Achievement Sharing", place: "진수당", placeEn: "Jinsudang", highlight: true, speaker: "" },
+        { id: "d2-2", time: "", ko: "대학원생 토크콘서트", en: "Graduate Student Talk Concert", place: "진수당", placeEn: "Jinsudang", highlight: false, speaker: "" },
+        { id: "d2-3", time: "", ko: "교육연구단 학술행사", en: "Research Group Academic Sessions", place: "진수당", placeEn: "Jinsudang", highlight: false, speaker: "" }
       ]
     }
   },

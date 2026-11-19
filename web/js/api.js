@@ -11,6 +11,7 @@
   var TIMEOUT_MS = 15000;
   var PHONE_RE = /^01[016789]\d{7,8}$/;
   var DAYS = ["day1", "day2", "both"];
+  var EMAIL_RE = /^[^s@]+@[^s@]+.[^s@]{2,}$/;
 
   /* ── 실제 호출 ── */
   function serverError() { return { ok: false, code: "SERVER" }; }
@@ -85,6 +86,9 @@
     org: "전북대학교 대학원 기계공학과",
     phone: "01011112222",
     day: "both",
+    affType: "grad",
+    email: "kim.jeonbuk@example.com",
+    programs: ["d1-1", "d1-2", "d2-1", "d2-2"],
     consentAt: "2026-11-18T10:12:00+09:00",
     lang: "ko",
     src: "sms",
@@ -107,7 +111,14 @@
   if (!API_BASE) {
     db = storageGet();
     if (!db || !Array.isArray(db.regs)) db = { seq: 41, regs: [] };
-    if (!db.regs.some(function (r) { return r.token === SEED.token; })) db.regs.unshift(Object.assign({}, SEED));
+    if (!db.regs.some(function (r) { return r.token === SEED.token; })) db.regs.unshift(clone(SEED));
+    db.regs.forEach(function (r) {
+      // 피드백 2 이전에 저장된 모의 데이터 — 예시 건은 새 항목을 채우고, 나머지는 빈 값으로 읽는다(실제 서버와 같음)
+      if (r.affType == null) {
+        if (r.token === SEED.token) { r.affType = SEED.affType; r.email = SEED.email; r.programs = SEED.programs.slice(); }
+        else { r.affType = ""; r.email = ""; r.programs = []; }
+      }
+    });
     storageSet(db);
   }
 
@@ -169,14 +180,49 @@
     return !!(d && d.remaining != null && d.remaining <= 0);
   }
 
-  function validate(p, needConsent) {
+  /* ── 소속 구분·세부 프로그램 (피드백 2) ── */
+  function normEmail(v) { return String(v == null ? "" : v).trim().toLowerCase(); }
+  // 고른 참석일에 속한 날 — day1 → [day1], day2 → [day2], both → 둘 다
+  function dayKeys(day) { return day === "both" ? ["day1", "day2"] : (day === "day1" || day === "day2" ? [day] : []); }
+  function programIds(cfg, k) {
+    var items = (((cfg.program || {})[k] || {}).items) || [];
+    return items.map(function (it, i) { return it.id || (k === "day1" ? "d1-" : "d2-") + (i + 1); });
+  }
+  // 중복 제거 + 설정 순서(day1 먼저, items 순)
+  function sortPrograms(cfg, list) {
+    var order = programIds(cfg, "day1").concat(programIds(cfg, "day2"));
+    var seen = {};
+    return (Array.isArray(list) ? list : []).map(String).filter(function (id) {
+      if (seen[id]) return false;
+      seen[id] = true;
+      return true;
+    }).sort(function (a, b) { return order.indexOf(a) - order.indexOf(b); });
+  }
+
+  function validate(p, needConsent, cfg) {
     var f = {};
     var name = String(p.name || "").trim();
     var org = String(p.org || "").trim();
+    var email = normEmail(p.email);
+    var affIds = (cfg.affiliations || []).map(function (a) { return a.id; });
     if (!name || name.length > 40) f.name = true;
+    if (affIds.indexOf(p.affType) < 0) f.affType = true;
     if (!org || org.length > 60) f.org = true;
     if (!PHONE_RE.test(digits(p.phone))) f.phone = true;
+    if (!email || email.length > 100 || !EMAIL_RE.test(email)) f.email = true;
     if (DAYS.indexOf(p.day) < 0) f.day = true;
+    // 고른 날의 프로그램만 허용, 프로그램이 있는 날은 그날 것을 최소 1개
+    var progs = Array.isArray(p.programs) ? p.programs.map(String) : null;
+    if (!progs) f.programs = true;
+    else {
+      var allowed = [];
+      dayKeys(p.day).forEach(function (k) {
+        var ids = programIds(cfg, k);
+        allowed = allowed.concat(ids);
+        if (ids.length && !progs.some(function (id) { return ids.indexOf(id) >= 0; })) f.programs = true;
+      });
+      if (progs.some(function (id) { return allowed.indexOf(id) < 0; })) f.programs = true;
+    }
     if (needConsent && p.consent !== true) f.consent = true;
     return Object.keys(f).length ? f : null;
   }
@@ -194,9 +240,12 @@
     submit: function (p) {
       p = p || {};
       var cfg = buildConfig();
-      if (p.hp) return ok({ receiptNo: "RF26-0000-0000", name: p.name, org: p.org, day: p.day, token: "" }); // 봇: 조용히 버림
+      if (p.hp) { // 봇: 조용히 버림 (성공과 같은 모양)
+        return ok({ receiptNo: "RF26-0000-0000", name: p.name, affType: p.affType || "", org: p.org, email: normEmail(p.email),
+          day: p.day, programs: Array.isArray(p.programs) ? p.programs : [], token: "" });
+      }
       if (isClosed(cfg)) return fail("CLOSED");
-      var fields = validate(p, true);
+      var fields = validate(p, true, cfg);
       if (fields) return fail("VALIDATION", { fields: fields });
       var phone = digits(p.phone);
       if (active().some(function (r) { return r.phone === phone; })) return fail("DUPLICATE");
@@ -205,32 +254,38 @@
       var reg = {
         receiptNo: receiptNo(), createdAt: now, updatedAt: now, status: "active",
         name: String(p.name).trim(), org: String(p.org).trim(), phone: phone, day: p.day,
-        consentAt: now, lang: p.lang || "ko", src: p.src || "direct", token: randomToken()
+        consentAt: now, lang: p.lang || "ko", src: p.src || "direct", token: randomToken(),
+        affType: p.affType, email: normEmail(p.email), programs: sortPrograms(cfg, p.programs)
       };
       db.regs.push(reg);
       storageSet(db);
-      return ok({ receiptNo: reg.receiptNo, name: reg.name, org: reg.org, day: reg.day, token: reg.token });
+      return ok({ receiptNo: reg.receiptNo, name: reg.name, affType: reg.affType, org: reg.org, email: reg.email,
+        day: reg.day, programs: reg.programs.slice(), token: reg.token });
     },
 
     lookup: function (token) {
       var r = db.regs.filter(function (x) { return token && x.token === token; })[0];
       if (!r) return fail("INVALID_TOKEN");
-      return ok({ receiptNo: r.receiptNo, name: r.name, org: r.org, phone: r.phone, day: r.day, status: r.status });
+      return ok({ receiptNo: r.receiptNo, name: r.name, affType: r.affType || "", org: r.org, phone: r.phone,
+        email: r.email || "", day: r.day, programs: (r.programs || []).slice(), status: r.status });
     },
 
     update: function (token, p) {
       p = p || {};
       var r = db.regs.filter(function (x) { return token && x.token === token; })[0];
       if (!r || r.status !== "active") return fail("INVALID_TOKEN");
-      var fields = validate(p, false);
+      var cfg = buildConfig();
+      var fields = validate(p, false, cfg);
       if (fields) return fail("VALIDATION", { fields: fields });
       var phone = digits(p.phone);
       if (active().some(function (x) { return x !== r && x.phone === phone; })) return fail("DUPLICATE");
-      if (p.day !== r.day && dayFull(buildConfig(), p.day)) return fail("DAY_FULL");
+      if (p.day !== r.day && dayFull(cfg, p.day)) return fail("DAY_FULL");
       r.name = String(p.name).trim(); r.org = String(p.org).trim(); r.phone = phone; r.day = p.day;
+      r.affType = p.affType; r.email = normEmail(p.email); r.programs = sortPrograms(cfg, p.programs);
       r.updatedAt = nowIso();
       storageSet(db);
-      return ok({ receiptNo: r.receiptNo, name: r.name, org: r.org, day: r.day });
+      return ok({ receiptNo: r.receiptNo, name: r.name, affType: r.affType, org: r.org, email: r.email,
+        day: r.day, programs: r.programs.slice() });
     },
 
     cancel: function (token) {

@@ -2,7 +2,7 @@
    Cloudflare Worker 만 호출한다. 본문: {action, k, ...payload} (docs/api.md).
    k 가 스크립트 속성 GAS_KEY 와 다르면 FORBIDDEN. 응답은 {ok:true,data} / {ok:false,code,message?,fields?}. */
 
-var API_CONFIG_CACHE_KEY = 'cfg:public:v1';
+var API_CONFIG_CACHE_KEY = 'cfg:public:v2';   // 설정 모양이 바뀌면 올린다(v2: 소속 구분·프로그램 id)
 var API_CONFIG_CACHE_SEC = 30;      // 설정 응답 캐시. 관리자 설정 변경은 최대 30초 뒤 참가자 화면에 반영된다.
 var API_PHONE_LIMIT = 5;            // 같은 번호로 10분에 신청·재발송 5회까지
 var API_PHONE_WINDOW_SEC = 600;
@@ -133,11 +133,16 @@ function flushVisits() {
 /* ================= submit ================= */
 function apiSubmit_(p) {
   // 허니팟: 사람에게는 보이지 않는 칸. 값이 있으면 저장하지 않고 성공한 척한다(모의 구현과 같은 응답).
-  if (p.hp) return { receiptNo: 'RF26-0000-0000', name: p.name, org: p.org, day: p.day, token: '' };
+  if (p.hp) {
+    var str = function (v) { return v == null ? '' : String(v); };
+    return { receiptNo: 'RF26-0000-0000', name: str(p.name), affType: str(p.affType), org: str(p.org), email: str(p.email),
+      day: str(p.day), programs: Array.isArray(p.programs) ? p.programs.map(str) : [], token: '' };
+  }
 
   var ss = rfwSpreadsheet_();
-  if (isClosed_(readConfig_(ss))) throw apiFail_('CLOSED');
-  var fields = validateReg_(p, true);
+  var cfg0 = readConfig_(ss);
+  if (isClosed_(cfg0)) throw apiFail_('CLOSED');
+  var fields = validateReg_(p, true, cfg0);
   if (fields) throw apiFail_('VALIDATION', { fields: fields });
   var phone = normPhone_(p.phone);
   phoneThrottle_(phone);
@@ -145,6 +150,8 @@ function apiSubmit_(p) {
   var reg = withLock_(function () {
     var cfg = readConfig_(ss);                      // 잠금 안에서 다시 읽어 마감·정원을 정확히 판단
     if (isClosed_(cfg)) throw apiFail_('CLOSED');
+    var f2 = validateReg_(p, true, cfg);            // 그 사이 세부 프로그램·소속 구분이 바뀌었을 수 있다
+    if (f2) throw apiFail_('VALIDATION', { fields: f2 });
     var regs = readRegs_(ss);
     if (activeRegs_(regs).some(function (r) { return r.phone === phone; })) throw apiFail_('DUPLICATE');
     if (isDayFull_(withRemaining_(cfg, regs, false), p.day)) throw apiFail_('DAY_FULL');
@@ -152,7 +159,8 @@ function apiSubmit_(p) {
     var r = {
       receiptNo: nextReceiptNo_(regs), createdAt: now, updatedAt: now, status: 'active',
       name: String(p.name).trim(), org: String(p.org).trim(), phone: phone, day: p.day,
-      consentAt: now, lang: normLang_(p.lang), src: normSrc_(p.src), token: newToken_()
+      consentAt: now, lang: normLang_(p.lang), src: normSrc_(p.src), token: newToken_(),
+      affType: p.affType, email: normEmail_(p.email), programs: cleanPrograms_(p.programs, p.day, cfg)
     };
     appendReg_(ss, r);
     var pendingVisits = pendingVisits_();           // 모아 둔 방문도 같은 시트 쓰기로 반영
@@ -163,7 +171,8 @@ function apiSubmit_(p) {
   });
   dropConfigCache_();
   sendSms_(reg.phone, confirmText_(reg));           // 잠금 밖에서. 실패해도 신청은 유지
-  return { receiptNo: reg.receiptNo, name: reg.name, org: reg.org, day: reg.day, token: reg.token };
+  return { receiptNo: reg.receiptNo, name: reg.name, affType: reg.affType, org: reg.org, email: reg.email,
+    day: reg.day, programs: reg.programs, token: reg.token };
 }
 
 /* ================= lookup / update / cancel ================= */
@@ -173,7 +182,8 @@ function apiLookup_(p) {
   if (!tokenOk_(p.token)) throw apiFail_('INVALID_TOKEN');
   var r = findReg_(readRegs_(rfwSpreadsheet_()), 'token', p.token);
   if (!r) throw apiFail_('INVALID_TOKEN');
-  return { receiptNo: r.receiptNo, name: r.name, org: r.org, phone: r.phone, day: r.day, status: r.status };
+  return { receiptNo: r.receiptNo, name: r.name, affType: r.affType, org: r.org, phone: r.phone, email: r.email,
+    day: r.day, programs: r.programs, status: r.status };
 }
 
 function apiUpdate_(p) {
@@ -183,12 +193,17 @@ function apiUpdate_(p) {
     var regs = readRegs_(ss);
     var r = findReg_(regs, 'token', p.token);
     if (!r || r.status !== 'active') throw apiFail_('INVALID_TOKEN');
-    var fields = validateReg_(p, false);
+    var cfg = readConfig_(ss);
+    // 새 칸(소속 구분·이메일·세부 프로그램)이 빈 옛 신청도 새 규칙대로 채워야 저장된다
+    var fields = validateReg_(p, false, cfg);
     if (fields) throw apiFail_('VALIDATION', { fields: fields });
     var phone = normPhone_(p.phone);
     if (activeRegs_(regs).some(function (x) { return x !== r && x.phone === phone; })) throw apiFail_('DUPLICATE');
-    if (p.day !== r.day && isDayFull_(withRemaining_(readConfig_(ss), regs, false), p.day)) throw apiFail_('DAY_FULL');
-    var next = { name: String(p.name).trim(), org: String(p.org).trim(), phone: phone, day: p.day };
+    if (p.day !== r.day && isDayFull_(withRemaining_(cfg, regs, false), p.day)) throw apiFail_('DAY_FULL');
+    var next = {
+      name: String(p.name).trim(), affType: p.affType, org: String(p.org).trim(), phone: phone,
+      email: normEmail_(p.email), day: p.day, programs: cleanPrograms_(p.programs, p.day, cfg)
+    };
     var diff = diffReg_(r, next);
     if (diff.changed) {
       Object.keys(next).forEach(function (k) { r[k] = next[k]; });
@@ -196,7 +211,7 @@ function apiUpdate_(p) {
       writeReg_(ss, r);
       appendHistory_(ss, { at: r.updatedAt, receiptNo: r.receiptNo, by: '본인', kind: '수정', before: diff.before, after: diff.after });
     }
-    return { receiptNo: r.receiptNo, name: r.name, org: r.org, day: r.day };
+    return { receiptNo: r.receiptNo, name: r.name, affType: r.affType, org: r.org, email: r.email, day: r.day, programs: r.programs };
   });
   dropConfigCache_();
   return out;

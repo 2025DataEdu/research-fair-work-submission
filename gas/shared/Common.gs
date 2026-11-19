@@ -85,15 +85,68 @@ function safeEqual_(a, b) {
   return diff === 0;
 }
 
+/* ---------- 이메일 ---------- */
+var RFW_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+function normEmail_(s) { return String(s == null ? '' : s).trim().toLowerCase(); }
+function emailOk_(e) { return e.length <= 100 && RFW_EMAIL_RE.test(e); }
+/** 'abcd@example.com' → 'ab***@example.com' (@ 앞 2자만 보인다) */
+function maskEmail_(e) {
+  e = String(e || '');
+  if (!e) return '';
+  var at = e.indexOf('@');
+  if (at < 0) return e.slice(0, 2) + '***';
+  return e.slice(0, Math.min(2, at)) + '***' + e.slice(at);
+}
+
+/* ---------- 소속 구분 · 세부 프로그램 ---------- */
+function affTypeOk_(v, cfg) {
+  var list = (cfg && cfg.affiliations) || [];
+  for (var i = 0; i < list.length; i++) if (list[i] && list[i].id === v) return true;
+  return false;
+}
+/** 참석일 → 그날(양일이면 두 날) 세부 프로그램 id 목록 [{day, ids}] (설정 순서) */
+function programDays_(cfg, day) {
+  var days = day === 'both' ? ['day1', 'day2'] : [day];
+  return days.map(function (d) {
+    var items = ((cfg.program || {})[d] || {}).items || [];
+    return { day: d, ids: items.map(function (it) { return it.id; }) };
+  });
+}
+/** 고른 프로그램 검사. 맞으면 중복 없이 설정 순서(22일 먼저)로 정렬한 배열, 틀리면 null.
+    고른 날에 속한 id 만 허용하고, 그날 항목이 하나라도 있으면 그날 것을 최소 1개 골라야 한다. */
+function cleanPrograms_(list, day, cfg) {
+  if (list == null) list = [];
+  if (!Array.isArray(list)) return null;
+  var picked = {};
+  for (var i = 0; i < list.length; i++) {
+    if (typeof list[i] !== 'string') return null;
+    picked[list[i]] = true;
+  }
+  var out = [], used = 0;
+  var groups = programDays_(cfg, day);
+  for (var g = 0; g < groups.length; g++) {
+    var n = 0;
+    groups[g].ids.forEach(function (id) { if (picked[id]) { out.push(id); n++; } });
+    if (groups[g].ids.length && !n) return null;
+    used += n;
+  }
+  return used === Object.keys(picked).length ? out : null;   // 다른 날·없는 id 가 섞이면 거부
+}
+
 /* ---------- 검증 (web/js/api.js 모의 구현과 같은 규칙) ---------- */
-function validateReg_(p, needConsent) {
+/** cfg: 소속 구분·세부 프로그램 확인용 설정(readConfig_). 없으면 기본 설정. */
+function validateReg_(p, needConsent, cfg) {
+  cfg = cfg || RFW_DEFAULT_CONFIG;
   var f = {};
   var name = String(p.name == null ? '' : p.name).trim();
   var org = String(p.org == null ? '' : p.org).trim();
   if (!name || name.length > 40) f.name = true;
+  if (!affTypeOk_(p.affType, cfg)) f.affType = true;
   if (!org || org.length > 60) f.org = true;
   if (!RFW_PHONE_RE.test(normPhone_(p.phone))) f.phone = true;
+  if (!emailOk_(normEmail_(p.email))) f.email = true;
   if (RFW_DAYS.indexOf(p.day) < 0) f.day = true;
+  else if (!cleanPrograms_(p.programs, p.day, cfg)) f.programs = true;
   if (needConsent && p.consent !== true) f.consent = true;
   return Object.keys(f).length ? f : null;
 }

@@ -15,18 +15,22 @@
   var NOW = '2026-12-18T23:50:00+09:00'; // 모의 기준 시각
 
   /* ---------- 결정적 난수 (mulberry32) ---------- */
-  var seed = 20261222;
-  function rnd() {
-    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
-    var t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  function makeRng(seed) {
+    return function () {
+      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+      var t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
   }
-  function pick(a) { return a[Math.floor(rnd() * a.length)]; }
-  function weighted(pairs) {
+  var rnd = makeRng(20261222);
+  // 소속 구분·이메일·세부 프로그램은 따로 뽑는다 → 기존 모의 값(이름·일시·경로·방문수)이 그대로 남는다
+  var rnd2 = makeRng(20261119);
+  function pick(a, rng) { return a[Math.floor((rng || rnd)() * a.length)]; }
+  function weighted(pairs, rng) {
     var total = 0, i;
     for (i = 0; i < pairs.length; i++) total += pairs[i][1];
-    var r = rnd() * total;
+    var r = (rng || rnd)() * total;
     for (i = 0; i < pairs.length; i++) { r -= pairs[i][1]; if (r < 0) return pairs[i][0]; }
     return pairs[pairs.length - 1][0];
   }
@@ -185,13 +189,31 @@
   })();
 
   /* ---------- 설정 ---------- */
+  // 소속 구분 기본값 (web/js/config.js 와 같음 — config.js 를 못 읽었을 때만 쓴다)
+  var DEFAULT_AFFS = [
+    { id: 'group', ko: '교육연구단', en: 'BK21 Research Group' },
+    { id: 'grad', ko: '대학원', en: 'Graduate School' },
+    { id: 'prof', ko: '교수', en: 'Faculty' },
+    { id: 'student', ko: '학생', en: 'Student' },
+    { id: 'external', ko: '외부참여자', en: 'External Participant' }
+  ];
+  function progItem(id, ko, en, hl) { return { id: id, time: '', ko: ko, en: en, place: '진수당', placeEn: 'Jinsudang', highlight: !!hl, speaker: '' }; }
   var config = (function () {
     var base = global.RFW_CONFIG ? clone(global.RFW_CONFIG) : {
       open: true, closeAt: '2026-12-19T18:00:00+09:00', showSpeakers: false,
       tagline: { ko: [[{ t: '4단계', em: true }, { t: '의 ' }, { t: '성과', em: true }], [{ t: '5단계', em: true }, { t: '의 ' }, { t: '미래', em: true }, { t: '로 ' }, { t: '잇다', em: true }]], en: 'From Phase 4 to Phase 5' },
       days: [{ value: 'day1', capacity: null, remaining: null }, { value: 'day2', capacity: null, remaining: null }, { value: 'both', capacity: null, remaining: null }],
-      program: { day1: { items: [] }, day2: { items: [] } }, contact: { phone: '', email: '' }, privacyUrl: '#privacy'
+      program: {
+        day1: { ko: { title: '리서치 컨퍼런스' }, items: [progItem('d1-1', '개막식·기조강연', 'Opening Ceremony & Keynote', 1), progItem('d1-2', '컨퍼런스 Session 1·2', 'Conference Sessions 1 & 2', 1), progItem('d1-3', '외국인 유학생 특강', 'Special Lecture for International Students')] },
+        day2: { ko: { title: 'BK21 성과공유회' }, items: [progItem('d2-1', 'BK21 4단계 성과공유회', 'BK21 Phase 4 Achievement Sharing', 1), progItem('d2-2', '대학원생 토크콘서트', 'Graduate Student Talk Concert'), progItem('d2-3', '교육연구단 학술행사', 'Research Group Academic Sessions')] }
+      },
+      contact: { phone: '', email: '' }, privacyUrl: '#privacy'
     };
+    // 예전 config.js(소속 구분·프로그램 id 없음)여도 돌아가게 채운다 — 서버의 '빈 ID 는 그날 순서로 d1-1…' 규칙과 같다
+    if (!Array.isArray(base.affiliations) || !base.affiliations.length) base.affiliations = clone(DEFAULT_AFFS);
+    ['day1', 'day2'].forEach(function (dk, di) {
+      ((base.program[dk] || {}).items || []).forEach(function (it, i) { if (!it.id) it.id = 'd' + (di + 1) + '-' + (i + 1); });
+    });
     // 모의 시연용 정원 (22일·23일 날짜별 정원). 'both' 행의 capacity 는 쓰지 않는다.
     base.days.forEach(function (d) {
       if (d.value === 'day1') d.capacity = 200;
@@ -199,6 +221,63 @@
     });
     return base;
   })();
+
+  /* ---------- 모의 신청에 새 필드 채우기 (소속 구분 · 이메일 · 세부 프로그램) ----------
+     기존 소속 문구에 맞춰 구분을 고르고, 참석일에 맞는 프로그램만 고른다(날짜마다 최소 1개). */
+  var ROMA = { 김: 'kim', 이: 'lee', 박: 'park', 최: 'choi', 정: 'jung', 강: 'kang', 조: 'cho', 윤: 'yoon', 장: 'jang', 임: 'lim', 한: 'han', 오: 'oh',
+    서: 'seo', 신: 'shin', 권: 'kwon', 황: 'hwang', 안: 'ahn', 송: 'song', 류: 'ryu', 홍: 'hong', 전: 'jeon', 고: 'ko', 문: 'moon', 양: 'yang', 손: 'son' };
+  var usedEmails = {};
+  function affIdOk(id) { return config.affiliations.some(function (a) { return a.id === id; }); }
+  function mockAff(r) {
+    var id;
+    if (r.org.indexOf('교육연구단') >= 0) id = 'group';
+    else if (r.org.indexOf('전북대학교 ') === 0) {
+      id = r.lang === 'en' ? weighted([['grad', 70], ['student', 30]], rnd2)
+        : r.org.slice(-4) === ' 대학원' ? 'grad'
+          : weighted([['grad', 44], ['student', 32], ['prof', 24]], rnd2);
+    } else id = 'external';
+    return affIdOk(id) ? id : config.affiliations[0].id;
+  }
+  function mockEmail(r) {
+    var local;
+    if (r.lang === 'en') {
+      var w = r.name.toLowerCase().replace(/[^a-z\s-]/g, '').split(/[\s-]+/);
+      local = w[0] + '.' + w[w.length - 1];
+    } else {
+      var ini = '', c = 'abcdeghijkmnoprsuwy';
+      for (var i = 0; i < 2; i++) ini += c.charAt(Math.floor(rnd2() * c.length));
+      local = (ROMA[r.name.charAt(0)] || 'jbnu') + (rnd2() < 0.5 ? '.' : '') + ini + (rnd2() < 0.6 ? pad(Math.floor(rnd2() * 100), 2) : '');
+    }
+    var dom = r.affType === 'external' ? weighted([['gmail.com', 45], ['naver.com', 35], ['daum.net', 12], ['hanmail.net', 8]], rnd2)
+      : weighted([['jbnu.ac.kr', 72], ['gmail.com', 18], ['naver.com', 10]], rnd2);
+    var e = local + '@' + dom, n = 2;
+    while (usedEmails[e]) e = local + (n++) + '@' + dom;
+    usedEmails[e] = 1;
+    return e;
+  }
+  // 프로그램별 고를 확률 (기본 항목 순서 기준, 그 밖의 항목은 0.4)
+  function progRate(dk, i, r) {
+    if (dk === 'day1') return [0.8, 0.62, r.lang === 'en' ? 0.85 : 0.12][i] || 0.4;
+    var young = r.affType === 'grad' || r.affType === 'student';
+    return [0.72, young ? 0.55 : 0.15, r.affType === 'group' ? 0.75 : 0.28][i] || 0.4;
+  }
+  function mockPrograms(r) {
+    var out = [];
+    ['day1', 'day2'].forEach(function (dk) {
+      if (r.day !== dk && r.day !== 'both') return;
+      var items = config.program[dk].items;
+      if (!items.length) return;
+      var chosen = items.filter(function (it, i) { return rnd2() < progRate(dk, i, r); });
+      if (!chosen.length) chosen = [items[0]];
+      chosen.forEach(function (it) { out.push(it.id); });
+    });
+    return out;
+  }
+  regs.forEach(function (r) {
+    r.affType = mockAff(r);
+    r.email = mockEmail(r);
+    r.programs = mockPrograms(r);
+  });
 
   /* ---------- 공통 ---------- */
   function wait(v) { return new Promise(function (res) { setTimeout(function () { res(clone(v)); }, DELAY); }); }
@@ -209,9 +288,34 @@
   }
   function mask(p) { return p.slice(0, 3) + '-****-' + p.slice(-4); }
   function hyphen(p) { return p.length === 11 ? p.slice(0, 3) + '-' + p.slice(3, 7) + '-' + p.slice(7) : p.slice(0, 3) + '-' + p.slice(3, 6) + '-' + p.slice(6); }
+  // 이메일 가림 (변경이력용): @ 앞 2자만 보이고 나머지 *** — ab***@example.com
+  function maskEmail(e) {
+    e = String(e || ''); if (!e) return '';
+    var at = e.indexOf('@');
+    return at < 0 ? e.slice(0, 2) + '***' : e.slice(0, Math.min(2, at)) + '***' + e.slice(at);
+  }
+  // 관리자는 자료 발송을 위해 이메일 원문을 받는다. programs 는 id 배열
   function publicRow(r) {
-    return { receiptNo: r.receiptNo, createdAt: r.createdAt, updatedAt: r.updatedAt, status: r.status, name: r.name, org: r.org,
-      phoneMasked: mask(r.phone), phoneLast4: r.phone.slice(-4), day: r.day, consentAt: r.consentAt, lang: r.lang, src: r.src };
+    return { receiptNo: r.receiptNo, createdAt: r.createdAt, updatedAt: r.updatedAt, status: r.status, name: r.name,
+      affType: r.affType || '', org: r.org, email: r.email || '',
+      phoneMasked: mask(r.phone), phoneLast4: r.phone.slice(-4), day: r.day, programs: (r.programs || []).slice(),
+      consentAt: r.consentAt, lang: r.lang, src: r.src };
+  }
+  var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  // 참석일에 맞는 세부 프로그램만 남겨 설정 순서(day1 먼저, items 순)로. 규칙에 어긋나면 null
+  function normPrograms(list, day) {
+    if (!Array.isArray(list)) return null;
+    var want = {}, out = [], ok = true;
+    list.forEach(function (id) { want[String(id)] = 1; });
+    var allowed = {};
+    ['day1', 'day2'].forEach(function (dk) {
+      if (day !== dk && day !== 'both') return;
+      var items = config.program[dk].items, n = 0;
+      items.forEach(function (it) { allowed[it.id] = 1; if (want[it.id]) { out.push(it.id); n++; } });
+      if (items.length && !n) ok = false; // 그날 프로그램이 있으면 최소 1개
+    });
+    Object.keys(want).forEach(function (id) { if (!allowed[id]) ok = false; });
+    return ok ? out : null;
   }
   function capIn(cfg, v) { for (var i = 0; i < cfg.days.length; i++) if (cfg.days[i].value === v) return cfg.days[i].capacity; return null; }
   function capOf(v) { for (var i = 0; i < config.days.length; i++) if (config.days[i].value === v) return config.days[i].capacity; return null; }
@@ -228,14 +332,17 @@
     var q = String(f.q || '').trim().toLowerCase();
     var qDigits = q.replace(/[^0-9]/g, '');
     var phoneLike = /^[0-9\s\-–.]+$/.test(q);
-    var day = f.day || 'all', status = f.status || 'active';
+    var day = f.day || 'all', status = f.status || 'active', aff = f.aff || '', prog = f.program || '';
     var out = regs.filter(function (r) {
       if (status !== 'all' && r.status !== status) return false;
       if (day === 'd22' && r.day === 'day2') return false;
       if (day === 'd23' && r.day === 'day1') return false;
       if ((day === 'day1' || day === 'day2' || day === 'both') && r.day !== day) return false;
+      if (aff && r.affType !== aff) return false;
+      if (prog && (r.programs || []).indexOf(prog) < 0) return false;
       if (!q) return true;
-      if (r.name.toLowerCase().indexOf(q) >= 0 || r.org.toLowerCase().indexOf(q) >= 0 || r.receiptNo.toLowerCase().indexOf(q) >= 0) return true;
+      if (r.name.toLowerCase().indexOf(q) >= 0 || r.org.toLowerCase().indexOf(q) >= 0 || r.receiptNo.toLowerCase().indexOf(q) >= 0 ||
+        (r.email || '').indexOf(q) >= 0) return true;
       // 전화번호: 숫자·하이픈·공백만 있으면 번호로 본다. 4자리는 뒷자리 일치, 5자리 이상은 부분 일치(010-1234-5678, 1234-5678 등)
       if (!phoneLike || qDigits.length < 4) return false;
       return qDigits.length === 4 ? r.phone.slice(-4) === qDigits : r.phone.indexOf(qDigits) >= 0;
@@ -258,6 +365,25 @@
     return adminLog.filter(function (l) { return l.action === action; }).sort(function (a, b) { return a.at < b.at ? 1 : -1; });
   }
 
+  /* 소속 구분 변경 요약 — 예) 소속 구분: 추가 연구원 · 이름 수정 학생 → 학부생 · 순서 변경 */
+  function affChanges(aa, ab) {
+    if (JSON.stringify(aa) === JSON.stringify(ab)) return '';
+    function byId(list) { var m = {}; list.forEach(function (x) { m[x.id] = x; }); return m; }
+    var ma = byId(aa), mb = byId(ab), parts = [];
+    var added = ab.filter(function (x) { return !ma[x.id]; }).map(function (x) { return x.ko; });
+    var removed = aa.filter(function (x) { return !mb[x.id]; }).map(function (x) { return x.ko; });
+    var renamed = ab.filter(function (x) { return ma[x.id] && (ma[x.id].ko !== x.ko || ma[x.id].en !== x.en); }).map(function (x) {
+      return ma[x.id].ko !== x.ko ? ma[x.id].ko + ' → ' + x.ko : x.ko + '(영문)';
+    });
+    var keepA = aa.filter(function (x) { return mb[x.id]; }).map(function (x) { return x.id; }).join(',');
+    var keepB = ab.filter(function (x) { return ma[x.id]; }).map(function (x) { return x.id; }).join(',');
+    if (added.length) parts.push('추가 ' + added.join(', '));
+    if (removed.length) parts.push('삭제 ' + removed.join(', '));
+    if (renamed.length) parts.push('이름 수정 ' + renamed.join(', '));
+    if (keepA !== keepB) parts.push('순서 변경');
+    return '소속 구분: ' + (parts.length ? parts.join(' · ') : '내용 수정');
+  }
+
   /* 설정 변경 요약 — 변경 기록에 남길 문장 */
   function configChanges(a, b) {
     var out = [];
@@ -269,6 +395,8 @@
       var ca = capIn(a, x[0]), cb = capIn(b, x[0]);
       if (ca !== cb) out.push(x[1] + ' 정원: ' + cap(ca) + ' → ' + cap(cb));
     });
+    var affLine = affChanges(a.affiliations || [], b.affiliations || []);
+    if (affLine) out.push(affLine);
     [['day1', '22일'], ['day2', '23일']].forEach(function (x) {
       var ia = (a.program[x[0]] || {}).items || [], ib = (b.program[x[0]] || {}).items || [];
       if (JSON.stringify(ia) === JSON.stringify(ib)) return;
@@ -323,7 +451,25 @@
       });
       var conversion = {};
       Object.keys(visits).forEach(function (k) { conversion[k] = visits[k] > 0 ? Math.round(vsub[k] / visits[k] * 10000) / 10000 : null; });
+      // 소속 구분별 · 세부 프로그램별 (유효 신청 기준). 설정에 없는 구분·빈 값은 _other, 지워진 프로그램은 removed 로 뒤에
+      var byAff = { _other: 0 }, progCount = {}, known = {}, byProgram = [];
+      config.affiliations.forEach(function (a) { byAff[a.id] = 0; });
+      regs.forEach(function (r) {
+        if (r.status !== 'active') return;
+        if (r.affType && r.affType !== '_other' && Object.prototype.hasOwnProperty.call(byAff, r.affType)) byAff[r.affType]++; else byAff._other++;
+        (r.programs || []).forEach(function (id) { progCount[id] = (progCount[id] || 0) + 1; });
+      });
+      ['day1', 'day2'].forEach(function (dk) {
+        config.program[dk].items.forEach(function (it) {
+          known[it.id] = 1;
+          byProgram.push({ id: it.id, day: dk, ko: it.ko, en: it.en, count: progCount[it.id] || 0 });
+        });
+      });
+      Object.keys(progCount).sort().forEach(function (id) {
+        if (!known[id]) byProgram.push({ id: id, day: /^d2-/.test(id) ? 'day2' : 'day1', ko: id, en: id, count: progCount[id], removed: true });
+      });
       return wait({
+        byAff: byAff, byProgram: byProgram,
         total: c.by.day1 + c.by.day2 + c.by.both, canceled: canceled, createdTotal: regs.length, byDay: c.by,
         perDate: { d22: c.d22, d23: c.d23 },
         capacity: { d22: capOf('day1'), d23: capOf('day2') },
@@ -333,13 +479,15 @@
       });
     },
 
-    /* {q, day: all|day1|day2|both|d22|d23, status: active|canceled|all, sort: 'key:asc|desc'} */
+    /* {q, day: all|day1|day2|both|d22|d23, status: active|canceled|all, aff: 소속 구분 id|'', program: 프로그램 id|'', sort: 'key:asc|desc'}
+       q 는 이름·소속·접수번호·이메일, 숫자만이면 전화번호에도 걸린다 */
     adminList: function (f) {
       if (failing('list')) return fail('SERVER', '신청자 목록을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.');
       var rows = filterRows(f).map(publicRow);
       return wait({ rows: rows, total: rows.length, generatedAt: nowIso() });
     },
 
+    /* patch: {name?, affType?, org?, phone?, email?, day?, programs?} — 없는 항목은 그대로 둔다 */
     adminUpdate: function (receiptNo, patch) {
       var r = find(receiptNo);
       if (!r) return fail('NOT_FOUND', '신청 건을 찾지 못했어요.');
@@ -357,17 +505,37 @@
         }
       }
       if ('day' in patch && ['day1', 'day2', 'both'].indexOf(patch.day) < 0) fields.day = true;
+      // 소속 구분·이메일·세부 프로그램: patch 에 없으면 기존 값 유지. 참석일을 바꾸면 프로그램도 새 참석일 기준으로 다시 확인
+      if ('affType' in patch) {
+        var at = String(patch.affType == null ? '' : patch.affType);
+        if (!config.affiliations.some(function (a) { return a.id === at; })) fields.affType = true; else patch.affType = at;
+      }
+      if ('email' in patch) {
+        var em = String(patch.email == null ? '' : patch.email).trim().toLowerCase();
+        if (!em || em.length > 100 || !EMAIL_RE.test(em)) fields.email = true; else patch.email = em;
+      }
+      if (('programs' in patch || 'day' in patch) && !fields.day) {
+        var pr = normPrograms('programs' in patch ? patch.programs : (r.programs || []), 'day' in patch ? patch.day : r.day);
+        if (!pr) fields.programs = true; else patch.programs = pr;
+      }
       if (Object.keys(fields).length) return fail('VALIDATION', '입력값을 확인해 주세요.', { fields: fields });
       if (r.status === 'canceled') return fail('CANCELED', '취소된 신청은 복원한 뒤 수정할 수 있어요.');
+      // 변경이력: 전화번호·이메일은 가린 값, 세부 프로그램은 쉼표 문자열로 남긴다 (diffReg_ 와 같음)
+      var KEYS = ['name', 'affType', 'org', 'phone', 'email', 'day', 'programs'];
+      function histOf(k, v) {
+        if (k === 'phone') return mask(v);
+        if (k === 'email') return maskEmail(v);
+        if (k === 'programs') return (v || []).join(',');
+        return v == null ? '' : v;
+      }
       var before = {}, after = {};
-      ['name', 'org', 'phone', 'day'].forEach(function (k) {
-        if (k in patch && patch[k] !== r[k]) {
-          before[k] = k === 'phone' ? mask(r[k]) : r[k];
-          after[k] = k === 'phone' ? mask(patch[k]) : patch[k];
-        }
+      KEYS.forEach(function (k) {
+        if (!(k in patch)) return;
+        var same = k === 'programs' ? (patch[k] || []).join(',') === (r[k] || []).join(',') : patch[k] === (r[k] == null ? '' : r[k]);
+        if (!same) { before[k] = histOf(k, r[k]); after[k] = histOf(k, patch[k]); }
       });
       if (!Object.keys(after).length) return wait(publicRow(r));
-      ['name', 'org', 'phone', 'day'].forEach(function (k) { if (k in patch) r[k] = patch[k]; });
+      KEYS.forEach(function (k) { if (k in patch) r[k] = k === 'programs' ? patch[k].slice() : patch[k]; });
       r.updatedAt = tick();
       history.push({ at: r.updatedAt, receiptNo: r.receiptNo, by: ME.email, kind: '수정', before: before, after: after });
       log('수정', { receiptNo: r.receiptNo });
@@ -412,6 +580,28 @@
 
     adminSaveConfig: function (cfg) {
       if (!cfg || !cfg.days || !cfg.program) return fail('VALIDATION', '설정 형식이 올바르지 않아요.');
+      // 소속 구분: 1~20개, id 고유(영문 소문자·숫자·_-, 20자까지), 국문 이름 1~30자, 영문 0~40자
+      var affs = cfg.affiliations, seenAff = {}, affBad = !Array.isArray(affs) || affs.length < 1 || affs.length > 20;
+      if (!affBad) {
+        affs = affs.map(function (a) { return { id: String((a && a.id) || ''), ko: String((a && a.ko) || '').trim(), en: String((a && a.en) || '').trim() }; });
+        affBad = affs.some(function (a) {
+          var bad = !/^[a-z0-9_-]{1,20}$/.test(a.id) || seenAff[a.id] || !a.ko || a.ko.length > 30 || a.en.length > 40;
+          seenAff[a.id] = 1;
+          return bad;
+        });
+      }
+      if (affBad) return fail('VALIDATION', '소속 구분을 확인해 주세요. 1~20개, 국문 이름은 1~30자, 영문 이름은 40자까지예요.', { fields: { affiliations: true } });
+      cfg.affiliations = affs;
+      // 세부 프로그램 id: 비었으면 d1-/d2- + 무작위 4자로 채우고, 겹치면 저장하지 않는다
+      var seenProg = {}, progDup = false;
+      ['day1', 'day2'].forEach(function (dk, di) {
+        ((cfg.program[dk] || {}).items || []).forEach(function (it) {
+          if (!it.id) { do { it.id = 'd' + (di + 1) + '-' + Math.random().toString(36).slice(2, 6); } while (seenProg[it.id] || it.id.length < 7); }
+          if (seenProg[it.id]) progDup = true;
+          seenProg[it.id] = 1;
+        });
+      });
+      if (progDup) return fail('VALIDATION', '세부 프로그램 ID가 겹쳐요. 새로고침한 뒤 다시 저장해 주세요.', { fields: { program: true } });
       var c = counts();
       cfg.days.forEach(function (d) {
         var cap = d.value === 'both' ? null : d.capacity;

@@ -5,8 +5,16 @@
   var I18N = window.RFW_I18N;
   var API = window.RFW_API;
   var PHONE_RE = /^01[016789]\d{7,8}$/;
+  var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
   var DAYS = ["day1", "day2", "both"];
-  var FIELDS = ["name", "org", "phone", "day", "consent"];
+  // 화면 순서 = 오류가 있을 때 포커스가 갈 순서
+  var FIELDS = ["name", "affType", "org", "phone", "email", "day", "programs", "consent"];
+  // 여러 입력(라디오·체크박스)으로 된 칸 — 오류 표시는 묶음(#f-칸)과 각 입력에 단다
+  var GROUP_FIELDS = { affType: 1, day: 1, programs: 1 };
+  var ERROR_KEYS = {
+    name: "form.name.error", affType: "form.org.typeError", org: "form.org.error", phone: "form.phone.error",
+    email: "form.email.error", day: "form.day.error", programs: "form.programs.error", consent: "form.consent.error"
+  };
   var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   var params = new URLSearchParams(location.search);
@@ -21,7 +29,7 @@
     mode: "new",          // new | edit
     token: params.get("t") || "",
     reg: null,            // 현재 신청 건 (완료·수정 모드)
-    draft: { name: "", org: "", phone: "", day: "", consent: false },
+    draft: emptyDraft(),
     submitted: false,     // 첫 제출 이후에만 오류 표시
     errors: {},           // { field: i18nKey }
     notice: null,         // { type, key }
@@ -31,6 +39,9 @@
   };
 
   /* ── 유틸 ── */
+  function emptyDraft() {
+    return { name: "", affType: "", org: "", phone: "", email: "", day: "", programs: [], consent: false };
+  }
   function initialLang() {
     var q = params.get("lang");
     if (q === "en" || q === "ko") return q;
@@ -238,6 +249,104 @@
       '<span class="nowrap">' + esc(s.slice(i + 3)) + "</span>";
   }
 
+  /* ── 소속 구분·세부 프로그램 (피드백 2) ── */
+  function affiliations() {
+    var list = (state.config && state.config.affiliations) || [];
+    return list.filter(function (a) { return a && a.id; });
+  }
+  function affLabel(id) {
+    var a = affiliations().filter(function (x) { return x.id === id; })[0];
+    if (!a) return "";
+    return state.lang === "en" ? (a.en || a.ko) : a.ko;
+  }
+  // 고른 참석일에 속한 날 — day1 → [day1], day2 → [day2], both → 둘 다
+  function dayKeys(day) { return day === "both" ? ["day1", "day2"] : (day === "day1" || day === "day2" ? [day] : []); }
+  // 그날 세부 프로그램 — 안내 표와 같은 원본(program.items). id 가 없으면(옛 설정) 그날 순서로 d1-1… 을 쓴다
+  function programItems(k) {
+    var p = ((state.config && state.config.program) || {})[k];
+    return ((p && p.items) || []).map(function (it, i) {
+      return { id: String(it.id || (k === "day1" ? "d1-" : "d2-") + (i + 1)), ko: it.ko || "", en: it.en || "", time: it.time || "" };
+    });
+  }
+  function programName(it) { return state.lang === "en" ? (it.en || it.ko) : it.ko; }
+  function findProgram(id) {
+    var hit = null;
+    ["day1", "day2"].forEach(function (k) {
+      programItems(k).forEach(function (it) { if (!hit && it.id === id) hit = { day: k, item: it }; });
+    });
+    return hit;
+  }
+  // 체크박스 id — 프로그램 id 기준이라 다시 그려도 같다(포커스 복원)
+  function progInputId(id) { return "f-prog-" + String(id).replace(/[^a-z0-9_-]/gi, "_"); }
+  // 고른 날에 속한 것만 남긴다(중복 제거, 설정 순서)
+  function keepPrograms(day, list) {
+    var out = [];
+    dayKeys(day).forEach(function (k) {
+      programItems(k).forEach(function (it) { if ((list || []).indexOf(it.id) >= 0 && out.indexOf(it.id) < 0) out.push(it.id); });
+    });
+    return out;
+  }
+
+  function affBlock(d) {
+    var pills = affiliations().map(function (a) {
+      var id = "f-aff-" + String(a.id).replace(/[^a-z0-9_-]/gi, "_");
+      return '<label class="pill" for="' + id + '">' +
+        '<input class="pill__input" type="radio" name="affType" id="' + id + '" value="' + esc(a.id) + '"' + (d.affType === a.id ? " checked" : "") + ">" +
+        '<span class="pill__box"><span class="pill__check">' + icon("check") + "</span>" +
+          '<span class="pill__text">' + esc(state.lang === "en" ? (a.en || a.ko) : a.ko) + "</span></span>" +
+        "</label>";
+    }).join("");
+    return '<fieldset class="field field--org" id="f-org-group">' +
+      '<legend class="field__label"><span class="field__no" aria-hidden="true">2</span>' + esc(t("form.org.label")) + "</legend>" +
+      '<div class="sub" data-field="affType">' +
+        '<p class="sub__label" id="f-affType-label">' + esc(t("form.org.typeLabel")) + "</p>" +
+        '<div class="pills" role="radiogroup" id="f-affType" aria-labelledby="f-affType-label" aria-required="true">' + pills + "</div>" +
+        '<p class="field__error" id="f-affType-err" hidden></p>' +
+      "</div>" +
+      '<div class="sub" data-field="org">' +
+        '<label class="sub__label" for="f-org">' + esc(t("form.org.detailLabel")) + "</label>" +
+        '<p class="field__hint" id="f-org-hint">' + esc(t("form.org.hint")) + "</p>" +
+        '<input class="input" id="f-org" name="org" type="text" autocomplete="organization" maxlength="60" aria-required="true" aria-describedby="f-org-hint" value="' + esc(d.org) + '">' +
+        '<p class="field__error" id="f-org-err" hidden></p>' +
+      "</div>" +
+    "</fieldset>";
+  }
+
+  // 참석할 프로그램 — 고른 날마다 묶음 하나. prevDay 가 있으면 새로 나타난 날의 묶음만 부드럽게 보인다.
+  function programsBlock(day, selected, prevDay) {
+    var prog = (state.config && state.config.program) || {};
+    var L = state.lang;
+    var before = prevDay == null ? null : dayKeys(prevDay);
+    var groups = dayKeys(day).map(function (k) {
+      var items = programItems(k);
+      if (!items.length) return "";   // 프로그램이 없는 날은 고를 것도, 요구할 것도 없다
+      var head = (prog[k] && (prog[k][L] || prog[k].ko)) || {};
+      var fresh = before && before.length && before.indexOf(k) < 0;   // 처음 나타날 때는 묶음 전체(.progs)가 움직인다
+      var rows = items.map(function (it) {
+        var id = progInputId(it.id);
+        return '<label class="pcheck" for="' + id + '">' +
+          '<input class="check__input" type="checkbox" name="programs" id="' + id + '" value="' + esc(it.id) + '"' +
+            ((selected || []).indexOf(it.id) >= 0 ? " checked" : "") + ">" +
+          '<span class="check__box">' + icon("check") + "</span>" +
+          '<span class="pcheck__text"><span class="pcheck__name">' + esc(programName(it)) + "</span>" +
+            (it.time ? '<span class="pcheck__time">' + esc(it.time) + "</span>" : "") +
+          "</span></label>";
+      }).join("");
+      return '<fieldset class="pgroup' + (fresh ? " is-new" : "") + '">' +
+        '<legend class="pgroup__head"><span class="pgroup__date">' + esc(head.date || "") +
+          (head.dow ? ' <span lang="en">' + esc(head.dow) + "</span>" : "") + "</span> " +
+          '<span class="pgroup__title">' + esc(head.title || "") + "</span></legend>" +
+        rows + "</fieldset>";
+    }).join("");
+    if (!groups) return "";
+    return '<div class="progs' + (before && !before.length ? " is-new" : "") + '" data-field="programs" id="f-programs" role="group" aria-labelledby="f-programs-label" aria-describedby="f-programs-hint">' +
+      '<p class="sub__label" id="f-programs-label">' + esc(t("form.programs.label")) + "</p>" +
+      '<p class="field__hint" id="f-programs-hint">' + esc(t("form.programs.hint")) + "</p>" +
+      groups +
+      '<p class="field__error" id="f-programs-err" hidden></p>' +
+    "</div>";
+  }
+
   function fieldBlock(id, no, opts) {
     var hint = opts.hint ? '<p class="field__hint" id="f-' + id + '-hint">' + esc(opts.hint) + "</p>" : "";
     return '<div class="field" data-field="' + id + '">' +
@@ -279,17 +388,16 @@
 
     var html =
       '<form class="form" id="reg-form" novalidate>' +
-        '<div class="card__head">' + head + '<p class="card__lead">' + esc(t("form.lead")) + "</p></div>" +
+        '<div class="card__head">' + head + '<p class="card__lead">' + esc(t("form.lead")) + "</p>" +
+          '<p class="info-line card__mail">' + icon("info") + "<span>" + esc(t("form.mailNotice")) + "</span></p>" +
+        "</div>" +
         '<div class="notice-slot" id="top-notice"></div>' +
 
         fieldBlock("name", 1, {
           label: t("form.name.label"), hint: t("form.name.hint"),
           control: '<input class="input" id="f-name" name="name" type="text" autocomplete="name" maxlength="40" aria-required="true" aria-describedby="f-name-hint" value="' + esc(d.name) + '">'
         }) +
-        fieldBlock("org", 2, {
-          label: t("form.org.label"), hint: t("form.org.hint"),
-          control: '<input class="input" id="f-org" name="org" type="text" autocomplete="organization" maxlength="60" aria-required="true" aria-describedby="f-org-hint" value="' + esc(d.org) + '">'
-        }) +
+        affBlock(d) +
         // maxlength 없음: "+82 10-1234-5678" 처럼 국가번호째 붙여 넣어도 잘리지 않게. 숫자 11자리는 formatPhone 이 제한한다.
         fieldBlock("phone", 3, {
           label: t("form.phone.label"), hint: phoneHint,
@@ -297,12 +405,19 @@
             (phoneHint ? ' aria-describedby="f-phone-hint"' : "") +
             ' placeholder="' + esc(t("form.phone.placeholder")) + '" value="' + esc(formatPhone(d.phone)) + '">'
         }) +
+        fieldBlock("email", 4, {
+          label: t("form.email.label"), hint: t("form.email.hint"),
+          control: '<input class="input" id="f-email" name="email" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" maxlength="100" aria-required="true" aria-describedby="f-email-hint"' +
+            ' placeholder="' + esc(t("form.email.placeholder")) + '" value="' + esc(d.email) + '">'
+        }) +
 
         '<fieldset class="field field--day" data-field="day" id="f-day" aria-describedby="f-day-hint">' +
-          '<legend class="field__label"><span class="field__no" aria-hidden="true">4</span>' + esc(t("form.day.label")) + "</legend>" +
+          '<legend class="field__label"><span class="field__no" aria-hidden="true">5</span>' + esc(t("form.day.label")) + "</legend>" +
           '<p class="field__hint" id="f-day-hint">' + esc(t("form.day.hint")) + "</p>" +
           '<div class="days">' + days + "</div>" +
           '<p class="field__error" id="f-day-err" hidden></p>' +
+          // 참석할 프로그램 — 고른 날에 따라 이 부분만 다시 그린다(onDayChange)
+          '<div class="progs-slot" id="programs-slot" data-day="' + esc(d.day) + '">' + programsBlock(d.day, d.programs) + "</div>" +
         "</fieldset>" +
 
         '<div class="field field--consent" data-field="consent">' +
@@ -366,19 +481,43 @@
     return dates.join(" ~ ") + " · " + esc(t("hero.place"));
   }
 
+  // 완료 화면의 참석 프로그램 목록 — 양일 참석이면 이름 앞에 날짜를 붙여 어느 날인지 보이게
+  function doneProgramList(r) {
+    var both = r.day === "both";
+    var prog = (state.config && state.config.program) || {};
+    var lis = (r.programs || []).map(function (id) {
+      var hit = findProgram(id);
+      if (!hit) return "<li>" + esc(id) + "</li>";   // 설정에서 지워진 프로그램 — id 라도 보여 준다
+      var head = prog[hit.day] && (prog[hit.day][state.lang] || prog[hit.day].ko);
+      var pre = both && head && head.date ? '<span class="summary__pday">' + esc(head.date) + "</span> " : "";
+      return "<li>" + pre + esc(programName(hit.item)) + "</li>";
+    }).join("");
+    return lis ? '<ul class="summary__list">' + lis + "</ul>" : "";
+  }
+
   function renderDone() {
     var r = state.reg;
     var when = whenWhere(r.day);
+    var aff = affLabel(r.affType);
+    var progs = doneProgramList(r);
+    // "행사 전에 {email} 로 …" — 주소만 굵게, 나머지 문구는 원문 그대로
+    var mail = "";
+    if (r.email) {
+      mail = t("done.mail").split("{email}").map(esc).join('<strong class="done__email">' + esc(r.email) + "</strong>");
+    }
     return '<div class="done">' +
       '<div class="done__mark">' + icon("check") + "</div>" +
       '<h2 class="card__title" id="apply-title" tabindex="-1">' + esc(t("done.title")) + "</h2>" +
       '<div class="receipt"><p class="receipt__label">' + esc(t("done.receipt")) + '</p><p class="receipt__no">' + esc(r.receiptNo) + "</p></div>" +
       '<dl class="summary">' +
         "<div><dt>" + esc(t("done.name")) + "</dt><dd>" + esc(r.name) + "</dd></div>" +
-        "<div><dt>" + esc(t("done.org")) + "</dt><dd>" + esc(r.org) + "</dd></div>" +
+        "<div><dt>" + esc(t("done.org")) + "</dt><dd>" + (aff ? esc(aff) + ' <span class="summary__sep">·</span> ' : "") + esc(r.org) + "</dd></div>" +
+        (r.email ? "<div><dt>" + esc(t("done.email")) + '</dt><dd class="summary__email">' + esc(r.email) + "</dd></div>" : "") +
         "<div><dt>" + esc(t("done.day")) + "</dt><dd>" + dayLabel(r.day) + "</dd></div>" +
+        (progs ? "<div><dt>" + esc(t("done.programs")) + "</dt><dd>" + progs + "</dd></div>" : "") +
         (when ? "<div><dt>" + esc(t("done.when")) + '</dt><dd class="summary__when">' + when + "</dd></div>" : "") +
       "</dl>" +
+      (mail ? '<p class="info-line done__mail">' + icon("info") + "<span>" + mail + "</span></p>" : "") +
       (SMS_ON ? '<p class="done__sms">' + icon("info") + "<span>" + esc(t("done.sms")) + "</span></p>" : "") +
       '<button type="button" class="btn-outline" id="to-edit">' + esc(t("done.edit")) + "</button>" +
       "</div>";
@@ -460,12 +599,18 @@
   function readForm() {
     var f = $("#reg-form");
     if (!f) return state.draft;
-    var day = $all('input[name="day"]', f).filter(function (r) { return r.checked; })[0];
+    var checked = function (name) { return $all('input[name="' + name + '"]', f).filter(function (r) { return r.checked; }); };
+    var day = checked("day")[0];
+    var aff = checked("affType")[0];
     state.draft = {
       name: f.elements.name.value,
+      affType: aff ? aff.value : "",
       org: f.elements.org.value,
       phone: phoneDigits(f.elements.phone.value),
+      email: f.elements.email.value,
       day: day ? day.value : "",
+      // 화면에 있는 체크박스 = 고른 날의 프로그램뿐이라 다른 날 것은 자연히 빠진다
+      programs: checked("programs").map(function (c) { return c.value; }),
       consent: state.mode === "edit" || f.elements.consent.checked
     };
     return state.draft;
@@ -473,12 +618,19 @@
 
   function validate(v) {
     var e = {};
-    var name = v.name.trim(), org = v.org.trim();
-    if (!name || name.length > 40) e.name = "form.name.error";
-    if (!org || org.length > 60) e.org = "form.org.error";
-    if (!PHONE_RE.test(phoneDigits(v.phone))) e.phone = "form.phone.error";
-    if (DAYS.indexOf(v.day) < 0) e.day = "form.day.error";
-    if (!v.consent && state.mode !== "edit") e.consent = "form.consent.error";
+    var name = v.name.trim(), org = v.org.trim(), email = v.email.trim();
+    if (!name || name.length > 40) e.name = ERROR_KEYS.name;
+    if (!affiliations().some(function (a) { return a.id === v.affType; })) e.affType = ERROR_KEYS.affType;
+    if (!org || org.length > 60) e.org = ERROR_KEYS.org;
+    if (!PHONE_RE.test(phoneDigits(v.phone))) e.phone = ERROR_KEYS.phone;
+    if (!email || email.length > 100 || !EMAIL_RE.test(email)) e.email = ERROR_KEYS.email;
+    if (DAYS.indexOf(v.day) < 0) e.day = ERROR_KEYS.day;
+    // 프로그램이 있는 날마다 그날 것을 하나 이상
+    else if (dayKeys(v.day).some(function (k) {
+      var ids = programItems(k).map(function (it) { return it.id; });
+      return ids.length && !v.programs.some(function (id) { return ids.indexOf(id) >= 0; });
+    })) e.programs = ERROR_KEYS.programs;
+    if (!v.consent && state.mode !== "edit") e.consent = ERROR_KEYS.consent;
     return e;
   }
 
@@ -486,7 +638,8 @@
     var err = $("#f-" + field + "-err");
     if (!err) return;
     var hintId = $("#f-" + field + "-hint") ? "f-" + field + "-hint" : ($("#f-" + field + "-note") ? "f-" + field + "-note" : "");
-    var targets = field === "day" ? $all('input[name="day"]') : [$("#f-" + field)];
+    var group = !!GROUP_FIELDS[field];
+    var targets = group ? $all('input[name="' + field + '"]') : [$("#f-" + field)];
     var wrap = $('[data-field="' + field + '"]');
     if (key) {
       err.innerHTML = icon("alert") + "<span>" + esc(t(key)) + "</span>";
@@ -498,15 +651,16 @@
       if (wrap) wrap.classList.remove("is-invalid");
     }
     var describedBy = [hintId, key ? err.id : ""].filter(Boolean).join(" ");
-    if (field === "day") {
-      var fs = $("#f-day");
-      if (describedBy) fs.setAttribute("aria-describedby", describedBy); else fs.removeAttribute("aria-describedby");
+    if (group) {
+      // 묶음(fieldset·radiogroup·group)에도 안내 + 오류
+      var box = $("#f-" + field);
+      if (box) { if (describedBy) box.setAttribute("aria-describedby", describedBy); else box.removeAttribute("aria-describedby"); }
     }
     targets.forEach(function (el) {
       if (!el) return;
       if (key) el.setAttribute("aria-invalid", "true"); else el.removeAttribute("aria-invalid");
-      // 라디오는 남은 자리 안내(data-describedby) + 오류 — 라디오에 포커스가 가도 오류를 읽어 준다
-      var ids = field === "day"
+      // 라디오·체크박스는 각자 안내(data-describedby, 남은 자리) + 오류 — 입력에 포커스가 가도 오류를 읽어 준다
+      var ids = group
         ? [el.getAttribute("data-describedby") || "", key ? err.id : ""].filter(Boolean).join(" ")
         : describedBy;
       if (ids) el.setAttribute("aria-describedby", ids); else el.removeAttribute("aria-describedby");
@@ -519,8 +673,12 @@
     var first = FIELDS.filter(function (f) { return errors[f]; })[0];
     if (!first) return;
     var target;
-    if (first === "day") {
-      var radios = $all('input[name="day"]').filter(function (r) { return !r.disabled; });
+    if (first === "programs") {
+      // 아직 하나도 고르지 않은 날의 첫 칸
+      var empty = $all(".pgroup").filter(function (g) { return !$all("input:checked", g).length; })[0];
+      target = $("input", empty || $("#f-programs") || document.createElement("div"));
+    } else if (GROUP_FIELDS[first]) {
+      var radios = $all('input[name="' + first + '"]').filter(function (r) { return !r.disabled; });
       target = radios.filter(function (r) { return r.checked; })[0] || radios[0];
     } else {
       target = $("#f-" + first);
@@ -532,13 +690,34 @@
     }
   }
 
-  function revalidate(field) {
+  // onlyClear: 고쳐졌으면 오류를 지우기만 하고 새 오류는 띄우지 않는다(방금 나타난 프로그램 칸에 바로 빨간 글씨가 뜨지 않게)
+  function revalidate(field, onlyClear) {
     if (!state.submitted) return;
     var e = validate(readForm());
     if (field) {
-      if (e[field]) state.errors[field] = e[field]; else delete state.errors[field];
+      if (e[field]) { if (!onlyClear || state.errors[field]) state.errors[field] = e[field]; }
+      else delete state.errors[field];
       setFieldError(field, state.errors[field]);
     }
+  }
+
+  // 참석일을 바꾸면 프로그램 칸만 다시 그린다 — 다른 날 프로그램은 빼고, 고른 칸은 그대로
+  function onDayChange() {
+    var slot = $("#programs-slot");
+    var d = readForm();
+    d.programs = keepPrograms(d.day, d.programs);
+    if (slot) {
+      slot.innerHTML = programsBlock(d.day, d.programs, slot.getAttribute("data-day") || "");
+      slot.setAttribute("data-day", d.day);
+      bindPrograms();
+    }
+    revalidate("day");
+    revalidate("programs", true);
+  }
+  function bindPrograms() {
+    $all('input[name="programs"]').forEach(function (c) {
+      c.addEventListener("change", function () { revalidate("programs"); });
+    });
   }
 
   /* ── 이벤트 ── */
@@ -560,12 +739,16 @@
       }
     });
 
-    ["name", "org", "phone"].forEach(function (k) {
+    ["name", "org", "phone", "email"].forEach(function (k) {
       $("#f-" + k).addEventListener("input", function () { revalidate(k); });
     });
-    $all('input[name="day"]').forEach(function (r) {
-      r.addEventListener("change", function () { revalidate("day"); });
+    $all('input[name="affType"]').forEach(function (r) {
+      r.addEventListener("change", function () { revalidate("affType"); });
     });
+    $all('input[name="day"]').forEach(function (r) {
+      r.addEventListener("change", onDayChange);
+    });
+    bindPrograms();
     $("#f-consent").addEventListener("change", function () { revalidate("consent"); });
 
     var more = $("#consent-more"), panel = $("#consent-panel");
@@ -610,7 +793,11 @@
     state.view = "form";
     state.mode = "edit";
     state.reg = reg;
-    state.draft = { name: reg.name, org: reg.org, phone: digits(reg.phone), day: reg.day, consent: true };
+    // 피드백 2 이전 신청 건은 affType·email·programs 가 비어 있다 — 새 규칙대로 채워야 저장된다
+    state.draft = {
+      name: reg.name, affType: reg.affType || "", org: reg.org, phone: digits(reg.phone),
+      email: reg.email || "", day: reg.day, programs: (reg.programs || []).slice(), consent: true
+    };
     state.submitted = false;
     state.errors = {};
     state.notice = null;
@@ -622,7 +809,7 @@
     state.mode = "new";
     state.reg = null;
     state.token = "";
-    state.draft = { name: "", org: "", phone: "", day: "", consent: false };
+    state.draft = emptyDraft();
     state.submitted = false;
     state.errors = {};
     state.notice = null;
@@ -648,14 +835,23 @@
 
   function handleFailure(res) {
     var code = res && res.code;
-    var known = { name: 1, org: 1, phone: 1, day: 1, consent: 1 };
     // 화면에 표시할 칸이 없는 VALIDATION 은 일반 오류로 알린다(아무 반응 없는 화면 방지)
-    if (code === "VALIDATION" && !Object.keys((res && res.fields) || {}).some(function (k) { return known[k]; })) code = "SERVER";
+    if (code === "VALIDATION" && !Object.keys((res && res.fields) || {}).some(function (k) { return ERROR_KEYS[k]; })) code = "SERVER";
     if (code === "VALIDATION") {
-      var map = { name: "form.name.error", org: "form.org.error", phone: "form.phone.error", day: "form.day.error", consent: "form.consent.error" };
+      var fields = res.fields || {};
       state.errors = {};
-      Object.keys(res.fields || {}).forEach(function (k) { if (map[k]) state.errors[k] = map[k]; });
+      Object.keys(fields).forEach(function (k) { if (ERROR_KEYS[k]) state.errors[k] = ERROR_KEYS[k]; });
       state.notice = null;
+      if (fields.affType || fields.programs) {
+        // 소속 구분·프로그램 목록이 서버 설정과 달랐을 수 있다 — 설정을 다시 받아 선택지를 새로 그린다(입력값은 유지)
+        readForm();
+        refreshConfig().then(function () {
+          state.draft.programs = keepPrograms(state.draft.day, state.draft.programs);
+          renderCard();
+          showErrors(state.errors, true);
+        });
+        return;
+      }
       renderNotice();
       showErrors(state.errors, true);
     } else if (code === "DUPLICATE") {
@@ -689,7 +885,10 @@
     showErrors(state.errors, true);
     if (Object.keys(state.errors).length) return;
 
-    var payload = { name: v.name.trim(), org: v.org.trim(), phone: phoneDigits(v.phone), day: v.day };
+    var payload = {
+      name: v.name.trim(), affType: v.affType, org: v.org.trim(), phone: phoneDigits(v.phone),
+      email: v.email.trim().toLowerCase(), day: v.day, programs: keepPrograms(v.day, v.programs)
+    };
     var edit = state.mode === "edit";
     setBusy(true, edit ? t("edit.saving") : t("form.submitting"));
 
@@ -820,14 +1019,28 @@
     }).catch(function () { /* 기본 설정 유지 */ });
   }
 
-  // 신청 카드 모양을 바꾸는 설정만 비교(접수 열림·마감, 날짜별 남은 자리)
+  // 신청 카드 모양을 바꾸는 설정만 비교(접수 열림·마감, 날짜별 남은 자리, 소속 구분, 세부 프로그램 선택지)
   function cardKey(c) {
     c = c || {};
-    return JSON.stringify([isClosed(c), (c.days || []).map(function (d) { return [d.value, d.capacity, d.remaining]; })]);
+    var prog = c.program || {};
+    var items = function (k) {
+      return ((prog[k] && prog[k].items) || []).map(function (it, i) { return [it.id || i, it.ko, it.en, it.time]; });
+    };
+    return JSON.stringify([
+      isClosed(c),
+      (c.days || []).map(function (d) { return [d.value, d.capacity, d.remaining]; }),
+      (c.affiliations || []).map(function (a) { return [a.id, a.ko, a.en]; }),
+      items("day1"), items("day2"),
+      [prog.day1 && prog.day1.ko, prog.day1 && prog.day1.en, prog.day2 && prog.day2.ko, prog.day2 && prog.day2.en]   // 프로그램 묶음 머리(날짜·제목)
+    ]);
   }
   // 입력 중이던 값·커서를 지키면서 카드를 다시 그린다
   function rerenderKeepingFocus() {
-    if (state.view === "form") readForm();
+    if (state.view === "form") {
+      readForm();
+      // 서버 설정에서 없어진 프로그램은 뺀다(다른 날 것도)
+      state.draft.programs = keepPrograms(state.draft.day, state.draft.programs);
+    }
     var a = document.activeElement, id = a && a.id, s = null, e = null;
     try { s = a.selectionStart; e = a.selectionEnd; } catch (x) { /* 선택 범위 없는 요소 */ }
     state.view = isClosed(state.config) ? "closed" : "form";

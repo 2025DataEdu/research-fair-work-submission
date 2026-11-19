@@ -5,19 +5,23 @@ var RFW_SHEET = {
   REG: '신청', HIST: '변경이력', CONF: '설정', PROG: '프로그램', ALOG: '관리자로그', VISIT: '방문집계'
 };
 var RFW_HEADERS = {
-  '신청': ['접수번호', '신청일시', '수정일시', '상태', '이름', '소속', '휴대전화번호', '참석일', '개인정보동의시각', '언어', '유입경로', '토큰'],
+  '신청': ['접수번호', '신청일시', '수정일시', '상태', '이름', '소속', '휴대전화번호', '참석일', '개인정보동의시각', '언어', '유입경로', '토큰', '소속구분', '이메일', '세부프로그램'],
   '변경이력': ['일시', '접수번호', '변경자', '구분', '변경 전', '변경 후'],
   '설정': ['항목', '값', '설명'],
-  '프로그램': ['날짜', '시간', '국문', '영문', '장소', '장소(영문)', '강조', '연사'],
+  '프로그램': ['날짜', '시간', '국문', '영문', '장소', '장소(영문)', '강조', '연사', 'ID'],
   '관리자로그': ['일시', '이메일', '행위', '상세'],
   '방문집계': ['날짜', '유입경로', '방문수', '신청수']
 };
 // 글자 서식(@)으로 고정할 열 수 — 전화번호 앞자리 0, 날짜 문자열이 자동 변환되지 않게. 방문집계는 숫자 열 제외.
-var RFW_TEXT_COLS = { '신청': 12, '변경이력': 6, '설정': 3, '프로그램': 8, '관리자로그': 4, '방문집계': 2 };
+var RFW_TEXT_COLS = { '신청': 15, '변경이력': 6, '설정': 3, '프로그램': 9, '관리자로그': 4, '방문집계': 2 };
 var RFW_MIN_ROWS = 3000;
 
 // '신청' 탭 열 위치 (0부터)
-var REG_COL = { receiptNo: 0, createdAt: 1, updatedAt: 2, status: 3, name: 4, org: 5, phone: 6, day: 7, consentAt: 8, lang: 9, src: 10, token: 11 };
+var REG_COL = {
+  receiptNo: 0, createdAt: 1, updatedAt: 2, status: 3, name: 4, org: 5, phone: 6, day: 7, consentAt: 8, lang: 9, src: 10, token: 11,
+  affType: 12, email: 13, programs: 14
+};
+var REG_WIDTH = 15;
 var REG_STATUS_KO = { active: '신청', canceled: '취소' };
 
 /* ---------- 스프레드시트 ---------- */
@@ -50,18 +54,51 @@ function setupSheets_(ss) {
     if (sh.getLastRow() === 0) {
       sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
     } else {
-      var cur = sh.getRange(1, 1, 1, headers.length).getValues()[0].map(String);
-      if (cur.join('|') !== headers.join('|')) {
+      var cur = sh.getRange(1, 1, 1, headers.length).getValues()[0].map(function (v) { return String(v).trim(); });
+      // 옛 머리행(뒤 열이 빈 채로 앞부분만 같음)이면 새 열 머리를 뒤에 붙인다. 예: 신청 12열 → 15열, 프로그램 8열 → 9열
+      var n = 0;
+      while (n < cur.length && cur[n] !== '') n++;
+      var older = n < headers.length && cur.slice(0, n).join('|') === headers.slice(0, n).join('|') &&
+        cur.slice(n).every(function (v) { return v === ''; });
+      if (older && n > 0) {
+        sh.getRange(1, n + 1, 1, headers.length - n).setValues([headers.slice(n)]).setFontWeight('bold');
+        made.push(name + ' 탭 열 추가(' + headers.slice(n).join(', ') + ')');
+      } else if (cur.join('|') !== headers.join('|')) {
         Logger.log("주의: '" + name + "' 탭 머리행이 예상과 달라요. 기대값: " + headers.join(' | '));
       }
     }
     sh.setFrozenRows(1);
   });
+  var filled = fillProgramSheetIds_(ss);
+  if (filled) made.push('프로그램 ID ' + filled + '칸 채움');
+  var conf = sheet_(ss, RFW_SHEET.CONF);
+  if (conf.getLastRow() >= 2 && !dataRows_(conf, 1).some(function (row) { return cellStr_(row[0]).trim() === 'affiliations'; })) {
+    var desc = RFW_CONF_KEYS.filter(function (kd) { return kd[0] === 'affiliations'; })[0][1];
+    conf.getRange(conf.getLastRow() + 1, 1, 1, 3).setValues([['affiliations', JSON.stringify(RFW_DEFAULT_CONFIG.affiliations), desc]]);
+    made.push('설정 affiliations 기본값');
+  }
   if (sheet_(ss, RFW_SHEET.CONF).getLastRow() < 2 && sheet_(ss, RFW_SHEET.PROG).getLastRow() < 2) {
     writeConfig_(ss, clone_(RFW_DEFAULT_CONFIG), true);
     made.push('설정·프로그램 기본값');
   }
   return made;
+}
+
+/** '프로그램' 탭에서 ID 칸이 빈 행에 그날 안 순서대로 'd1-1', 'd1-2'… 를 채운다(readConfig_ 대체 id 와 같은 값).
+    채운 칸 수를 돌려준다. 여러 번 실행해도 안전. */
+function fillProgramSheetIds_(ss) {
+  var sh = sheet_(ss, RFW_SHEET.PROG);
+  var rows = dataRows_(sh, RFW_PROG_WIDTH), idCol = RFW_PROG_WIDTH - 1, seen = { day1: 0, day2: 0 }, n = 0;
+  var ids = rows.map(function (row) {
+    var day = cellStr_(row[0]).trim(), id = cellStr_(row[idCol]).trim();
+    if (seen[day] == null) return [row[idCol]];
+    var idx = seen[day]++;
+    if (id) return [row[idCol]];
+    n++;
+    return [fallbackProgramId_(day, idx)];
+  });
+  if (n) sh.getRange(2, RFW_PROG_WIDTH, ids.length, 1).setValues(ids);
+  return n;
 }
 
 /* ---------- 신청 ---------- */
@@ -79,7 +116,10 @@ function rowToReg_(row, rowNum) {
     consentAt: cellIso_(row[REG_COL.consentAt]),
     lang: cellStr_(row[REG_COL.lang]) || 'ko',
     src: normSrc_(cellStr_(row[REG_COL.src])),
-    token: cellStr_(row[REG_COL.token])
+    token: cellStr_(row[REG_COL.token]),
+    affType: cellStr_(row[REG_COL.affType]).trim(),
+    email: cellStr_(row[REG_COL.email]).trim(),
+    programs: cellStr_(row[REG_COL.programs]).split(',').map(function (s) { return s.trim(); }).filter(String)
   };
 }
 function regToRow_(r) {
@@ -96,11 +136,14 @@ function regToRow_(r) {
   row[REG_COL.lang] = r.lang;
   row[REG_COL.src] = r.src;
   row[REG_COL.token] = r.token;
+  row[REG_COL.affType] = safeCell_(r.affType || '');
+  row[REG_COL.email] = safeCell_(r.email || '');
+  row[REG_COL.programs] = safeCell_((r.programs || []).join(','));
   return row;
 }
 /** 접수번호가 있는 행만. 각 객체의 _row 는 시트 행 번호. */
 function readRegs_(ss) {
-  var rows = dataRows_(sheet_(ss, RFW_SHEET.REG), 12), out = [];
+  var rows = dataRows_(sheet_(ss, RFW_SHEET.REG), REG_WIDTH), out = [];
   for (var i = 0; i < rows.length; i++) {
     if (String(rows[i][REG_COL.receiptNo]).trim()) out.push(rowToReg_(rows[i], i + 2));
   }
@@ -110,7 +153,7 @@ function readRegs_(ss) {
 function appendReg_(ss, r) {
   var sh = sheet_(ss, RFW_SHEET.REG);
   var rowNum = sh.getLastRow() + 1;
-  var rg = sh.getRange(rowNum, 1, 1, 12);
+  var rg = sh.getRange(rowNum, 1, 1, REG_WIDTH);
   rg.setNumberFormat('@');
   rg.setValues([regToRow_(r)]);
   r._row = rowNum;
@@ -126,7 +169,7 @@ function writeReg_(ss, r) {
     if (!found) throw new Error('신청 행을 찾지 못했어요: ' + r.receiptNo);
     rowNum = found._row;
   }
-  sh.getRange(rowNum, 1, 1, 12).setValues([regToRow_(r)]);
+  sh.getRange(rowNum, 1, 1, REG_WIDTH).setValues([regToRow_(r)]);
 }
 function findReg_(regs, key, value) {
   if (!value) return null;
@@ -156,8 +199,10 @@ function nextReceiptNo_(regs) {
 /** 관리자 목록·내보내기용 행 (admin/js/api.js publicRow 와 같은 모양) */
 function publicRow_(r) {
   return {
-    receiptNo: r.receiptNo, createdAt: r.createdAt, updatedAt: r.updatedAt, status: r.status, name: r.name, org: r.org,
-    phoneMasked: maskPhone_(r.phone), phoneLast4: r.phone.slice(-4), day: r.day, consentAt: r.consentAt, lang: r.lang, src: r.src
+    receiptNo: r.receiptNo, createdAt: r.createdAt, updatedAt: r.updatedAt, status: r.status, name: r.name,
+    affType: r.affType, org: r.org, email: r.email,      // 이메일은 자료 발송용이라 관리자에게 원문
+    phoneMasked: maskPhone_(r.phone), phoneLast4: r.phone.slice(-4), day: r.day, programs: (r.programs || []).slice(),
+    consentAt: r.consentAt, lang: r.lang, src: r.src
   };
 }
 
@@ -179,14 +224,19 @@ function newestFirst_(list) {
     .sort(function (a, b) { return a.x.at < b.x.at ? 1 : a.x.at > b.x.at ? -1 : b.i - a.i; })
     .map(function (o) { return o.x; });
 }
-/** 바뀐 항목만 before/after 로. 전화번호는 가린 값으로 남긴다(admin/js/api.js 와 같음). */
+/** 바뀐 항목만 before/after 로. 전화번호·이메일은 가린 값, 세부 프로그램은 쉼표 문자열로 남긴다(admin/js/api.js 와 같음). */
 function diffReg_(r, next) {
   var before = {}, after = {};
-  ['name', 'org', 'phone', 'day'].forEach(function (k) {
-    if (k in next && next[k] !== r[k]) {
-      before[k] = k === 'phone' ? maskPhone_(r[k]) : r[k];
-      after[k] = k === 'phone' ? maskPhone_(next[k]) : next[k];
-    }
+  function val(k, v) {
+    if (k === 'phone') return maskPhone_(v);
+    if (k === 'email') return maskEmail_(v);
+    if (k === 'programs') return (v || []).join(',');
+    return v == null ? '' : v;
+  }
+  ['name', 'affType', 'org', 'phone', 'email', 'day', 'programs'].forEach(function (k) {
+    if (!(k in next)) return;
+    var same = k === 'programs' ? val(k, next[k]) === val(k, r[k]) : next[k] === r[k];
+    if (!same) { before[k] = val(k, r[k]); after[k] = val(k, next[k]); }
   });
   return { before: before, after: after, changed: Object.keys(after).length > 0 };
 }

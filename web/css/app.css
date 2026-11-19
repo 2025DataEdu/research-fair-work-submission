@@ -238,6 +238,14 @@ button { cursor: pointer; }
 .card__title { font-size: 22px; font-weight: 800; line-height: 1.38; letter-spacing: -0.025em; text-wrap: balance; }
 @media (min-width: 1200px) { .card__title { font-size: 24px; } }
 .card__lead { margin-top: 8px; font-size: 15px; color: var(--text-sub); line-height: 1.6; }
+/* 안내 한 줄 (정보 아이콘) — 폼 머리 '이메일로 자료를 보내 드려요', 완료 화면 이메일 안내 */
+.info-line {
+  display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px;
+  background: rgba(0, 180, 240, 0.08); border-radius: var(--radius-sm);
+  font-size: 15px; font-weight: 600; line-height: 1.55; color: var(--text);
+}
+.info-line .i { flex: none; color: var(--cyan); margin-top: 2px; }
+.card__mail { margin-top: 16px; }
 
 .field { margin: 0 0 24px; min-width: 0; }
 fieldset.field { border: 0; padding: 0; }
@@ -310,6 +318,64 @@ fieldset.field { border: 0; padding: 0; }
   font-size: 12px; font-weight: 700; color: var(--text-sub); letter-spacing: 0.02em;
 }
 
+/* 한 칸 안의 작은 항목 — 2 소속(소속 구분 + 세부 소속), 5 참석일의 참석할 프로그램 */
+.sub { margin-top: 12px; }
+.sub + .sub { margin-top: 20px; }
+.sub__label { display: block; font-size: 15px; font-weight: 600; line-height: 1.4; color: var(--text-sub); }
+
+/* 소속 구분 (라디오 알약) — 참석일 카드와 같은 선택 표시, 좁은 화면에서는 줄바꿈 */
+.pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.pill { position: relative; display: inline-flex; max-width: 100%; cursor: pointer; }
+.pill__input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+.pill__box {
+  display: inline-flex; align-items: center; gap: 8px;
+  min-height: var(--tap); padding: 8px 16px 8px 12px;
+  border: 1px solid var(--line-neutral); border-radius: 999px;
+  font-size: 15px; font-weight: 600; line-height: 1.3;
+  transition: border-color .15s ease, background-color .15s ease;
+}
+.pill:hover .pill__box { border-color: var(--line-neutral-hover); }
+.pill__check {
+  flex: none; display: grid; place-items: center;
+  width: 18px; height: 18px; border: 1.5px solid var(--line-neutral); border-radius: 50%;
+  color: transparent; transition: background-color .15s ease, border-color .15s ease;
+}
+.pill__check .i { width: 12px; height: 12px; }
+.pill__input:checked + .pill__box {
+  border-color: var(--cyan); box-shadow: inset 0 0 0 1px var(--cyan); background: rgba(0, 180, 240, 0.06);
+}
+.pill__input:checked + .pill__box .pill__check { background: var(--cyan); border-color: var(--cyan); color: #000; }
+.pill__input:focus-visible + .pill__box { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.is-invalid .pill__box { border-color: rgba(255, 107, 107, 0.6); }
+
+/* 참석할 프로그램 (체크박스) — 참석일을 고르면 그 아래에 날짜별로 나타난다 */
+.progs {
+  margin-top: 16px; padding: 16px 16px 8px;
+  background: var(--surface-sunk); border: 1px solid var(--line); border-radius: var(--radius-sm);
+}
+.progs.is-invalid { border-color: rgba(255, 107, 107, 0.6); }
+.progs > .field__error { margin-bottom: 8px; }
+.pgroup { min-width: 0; margin: 12px 0 0; padding: 0; border: 0; }
+/* fieldset 테두리는 legend 를 가로지르므로 묶음 사이는 간격으로만 나눈다 */
+.pgroup + .pgroup { margin-top: 20px; }
+.pgroup__head {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; padding: 0;
+  font-size: 14px; font-weight: 700; line-height: 1.4;
+}
+.pgroup__date { color: var(--cyan); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pgroup__title { color: var(--text); }
+.pcheck {
+  position: relative; display: flex; align-items: flex-start; gap: 12px;
+  min-height: 48px; padding: 12px 0; cursor: pointer;
+}
+.pcheck + .pcheck { border-top: 1px solid var(--line); }
+.pcheck:hover .check__box { border-color: var(--cyan); }
+.pcheck__text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pcheck__name { font-size: 16px; font-weight: 600; line-height: 1.45; }
+.pcheck__time { font-size: 13px; font-weight: 600; line-height: 1.3; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+@keyframes rfw-reveal { from { opacity: 0; transform: translateY(-6px); } }
+.progs.is-new, .pgroup.is-new { animation: rfw-reveal .22s ease-out; }
+
 /* 개인정보 동의 */
 .field--consent { padding-top: 16px; border-top: 1px solid var(--line); }
 .consent { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 0 8px; }
@@ -327,7 +393,7 @@ fieldset.field { border: 0; padding: 0; }
 .consent__note { margin: -6px 0 4px 36px; font-size: 14px; line-height: 1.5; color: var(--text-muted); }
 .check__input:checked + .check__box { background: var(--cyan); border-color: var(--cyan); color: #000; }
 .check__input:focus-visible + .check__box { outline: 2px solid var(--cyan); outline-offset: 2px; }
-.is-invalid .check__box { border-color: var(--error); }
+.field--consent.is-invalid .check__box, .progs.is-invalid .check__box { border-color: var(--error); }
 .check__text { font-size: 16px; font-weight: 600; line-height: 1.5; }
 .check__req { color: var(--cyan); font-weight: 700; }
 .disclose {
@@ -448,6 +514,18 @@ fieldset.field { border: 0; padding: 0; }
 :lang(en) .summary > div { grid-template-columns: 6.5em minmax(0, 1fr); }
 .summary dt { font-size: 14px; font-weight: 600; color: var(--text-muted); line-height: 1.6; }
 .summary dd { font-size: 16px; font-weight: 600; line-height: 1.5; }
+.summary__sep { color: var(--text-muted); }
+.summary__email { overflow-wrap: anywhere; }
+.summary__list { display: grid; gap: 4px; }
+.summary__list li { position: relative; padding-left: 14px; }
+.summary__list li::before {
+  content: ""; position: absolute; left: 0; top: 0.68em;
+  width: 5px; height: 5px; border-radius: 50%; background: var(--cyan);
+}
+.summary__pday { font-size: 14px; color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.done__mail { margin-top: 24px; font-weight: 500; color: var(--text-sub); }
+.done__email { color: var(--text); font-weight: 700; overflow-wrap: anywhere; }
+.done__mail + .done__sms { margin-top: 8px; }
 .done__sms {
   display: flex; gap: 10px; align-items: flex-start; margin-top: 24px; padding: 14px 16px;
   background: var(--surface-2); border-radius: var(--radius-sm);

@@ -604,6 +604,59 @@ input[type="datetime-local"] { color-scheme: dark; }
   .drawer__head { padding: 12px var(--s2); }
 }
 
+/* ---------- 소속 구분 · 세부 프로그램 ---------- */
+/* 목록 필터: 고르기 상자를 라디오 그룹(.seg) 높이에 맞춘다 */
+/* 두 고르기 상자는 한 묶음으로 줄바꿈된다 (좁으면 검색칸이 첫 줄을 채우고 둘이 함께 다음 줄로) */
+.toolbar__group { display: flex; flex-wrap: wrap; gap: var(--s2); flex: 0 1 auto; }
+.field--select { flex: 0 1 168px; width: 168px; }
+.field--select-wide { flex-basis: 220px; width: 220px; }
+select { color-scheme: dark; cursor: pointer; }
+.toolbar select { min-height: 34px; padding: 4px 10px; font-size: 13.5px; }
+@media (pointer: coarse) { .toolbar select { min-height: 44px; } }
+/* 목록 소속 칸: 구분 꼬리표 + 세부 소속 */
+.aff-tag {
+  display: inline-block; margin-right: 8px; padding: 1px 7px; border-radius: 4px; vertical-align: 1px;
+  font-size: 12px; font-weight: 700; line-height: 1.5; background: var(--surface-3); color: var(--text-sub);
+}
+/* 현황: 구분·프로그램 이름은 목록으로 가는 링크 */
+.hbar__link { color: inherit; text-decoration: none; border-bottom: 1px dashed var(--line); }
+.hbar__link:hover { color: var(--cyan); border-bottom-color: var(--cyan); }
+.hbars--aff .hbar { grid-template-columns: minmax(96px, 26%) minmax(0, 1fr) auto; }
+.prog-table tbody th { height: var(--row-h); font-weight: 600; white-space: normal; line-height: 1.35; }
+.prog-table .tag { padding: 0 8px; font-size: 11.5px; margin-left: 4px; }
+.prog-table tr.prog-group th {
+  height: auto; padding-top: 14px; padding-bottom: 6px; color: var(--text-sub); font-size: 12.5px; font-weight: 700;
+  border-bottom: 1px solid var(--line);
+}
+.prog-table tr.prog-group:first-child th { padding-top: 4px; }
+.prog-table tr.prog-group small { display: inline; margin-left: 6px; font-weight: 500; color: var(--text-muted); }
+.prog-table td.empty { padding: 12px 0; }
+.prog-table .conv__bar { width: 96px; }
+/* 상세 서랍 */
+.muted { color: var(--text-muted); }
+.dd-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.field-pair { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: var(--s2) 12px; }
+.prog-fieldset { gap: 8px; }
+.prog-fieldset > .field__help { margin: -2px 0 2px; }
+.prog-pick { display: flex; flex-direction: column; gap: 6px; }
+.prog-pick + .prog-pick { margin-top: 6px; }
+.prog-pick__day { font-size: 12.5px; font-weight: 700; color: var(--text-sub); }
+/* 설정: 소속 구분 편집 · 항목 아래 ID 줄 */
+.aff-item__fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 10px 12px; align-items: start; }
+.item-meta { grid-column: 1 / -1; font-size: 12px; color: var(--text-muted); }
+.item-meta code { font-size: 11.5px; color: var(--text-sub); }
+.prog-add { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+@media (max-width: 720px) {
+  .aff-item__fields { grid-template-columns: minmax(0, 1fr); }
+  .hbars--aff .hbar { grid-template-columns: minmax(0, 1fr) auto; }
+  #listTable td[data-col="org"] .aff-tag { margin-right: 6px; }
+}
+@media (max-width: 560px) {
+  .toolbar__group { flex: 1 1 100%; }
+  .field--select, .field--select-wide { flex: 1 1 140px; width: auto; }
+  .field-pair { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* 라벨이 긴 막대 목록: 라벨 한 줄 위, 막대+값 아래 */
 .hbars--stacked .hbar { grid-template-columns: minmax(0, 1fr) auto; row-gap: 6px; }
 .hbars--stacked .hbar__label { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
