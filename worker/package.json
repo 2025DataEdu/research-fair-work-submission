@@ -1,0 +1,15 @@
+{
+  "name": "rfw-api-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "2026 JBNU-G 리서치페어 위크 접수 API 프록시 (Cloudflare Worker → Apps Script)",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "4.165.0"
+  }
+}

@@ -1,0 +1,33 @@
+# 리서치페어 위크 접수 API 프록시 — 배포 방법은 docs/deploy-worker.md
+name = "rfw-api"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+workers_dev = true
+
+[vars]
+# Apps Script 웹앱 배포 주소 (…/macros/s/<배포 ID>/exec). 비어 있으면 모든 호출이 SERVER 로 응답한다.
+GAS_URL = ""
+# 참가자 화면이 열리는 주소(출처). 쉼표로 구분, 끝 '/' 없이. Cloudflare Pages 주소가 생기면 여기에 추가.
+ALLOWED_ORIGINS = "https://2025dataedu.github.io,http://localhost:8787,http://127.0.0.1:8787"
+# GAS_KEY 는 비밀값이라 여기에 쓰지 않는다:  npx wrangler secret put GAS_KEY
+# 로컬 개발 때는 worker/.dev.vars 에 GAS_KEY=... (git 제외)
+
+# IP당 횟수 제한 (Workers Rate Limiting 바인딩). period 는 10 또는 60(초)만 가능.
+# namespace_id 는 계정 안에서 겹치지 않는 양의 정수(문자열로 적는다).
+# 쓰기: submit · update · cancel · resend
+[[ratelimits]]
+name = "RL_WRITE"
+namespace_id = "2612201"
+
+  [ratelimits.simple]
+  limit = 10
+  period = 60
+
+# 읽기: config · lookup
+[[ratelimits]]
+name = "RL_READ"
+namespace_id = "2612202"
+
+  [ratelimits.simple]
+  limit = 60
+  period = 60

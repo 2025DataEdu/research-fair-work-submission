@@ -646,6 +646,9 @@
 
   function handleFailure(res) {
     var code = res && res.code;
+    var known = { name: 1, org: 1, phone: 1, day: 1, consent: 1 };
+    // 화면에 표시할 칸이 없는 VALIDATION 은 일반 오류로 알린다(아무 반응 없는 화면 방지)
+    if (code === "VALIDATION" && !Object.keys((res && res.fields) || {}).some(function (k) { return known[k]; })) code = "SERVER";
     if (code === "VALIDATION") {
       var map = { name: "form.name.error", org: "form.org.error", phone: "form.phone.error", day: "form.day.error", consent: "form.consent.error" };
       state.errors = {};
@@ -747,7 +750,10 @@
         clearTokenFromUrl();
         refreshConfig();
         renderCard({ focus: true, scroll: true });
-      } else handleFailure(res);
+      } else {
+        if (btn) btn.disabled = false; // 일시 오류(RATE_LIMITED·SERVER) 뒤 다시 누를 수 있게
+        handleFailure(res);
+      }
     }).catch(function () {
       state.busy = false;
       if (btn) btn.disabled = false;
@@ -841,6 +847,9 @@
           if (res && res.ok) {
             if (res.data.status === "canceled") { state.view = "canceled"; return; }
             enterEdit(res.data);
+          } else if (res && (res.code === "SERVER" || res.code === "RATE_LIMITED")) {
+            // 일시 오류 — 링크(?t=)는 주소에 남겨 새로고침으로 다시 시도할 수 있게
+            state.notice = { type: "error", key: res.code === "RATE_LIMITED" ? "errors.rate" : "errors.network", where: "top" };
           } else {
             startNew();
             state.notice = { type: "invalid", where: "top" };

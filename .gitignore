@@ -7,3 +7,9 @@
 /.claude/agents/
 /.impeccable/hook.cache.json
 /.impeccable/config.local.json
+
+# Apps Script 빌드 산출물 · Worker 로컬 상태
+/gas/dist/
+/worker/.wrangler/
+/worker/.dev.vars
+node_modules/

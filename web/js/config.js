@@ -1,6 +1,13 @@
 /* 행사 설정 기본값 (모의 데이터)
    실제 운영에서는 GET /config 응답으로 대체된다 — 관리자 화면 '설정'에서 수정하는 값과 같은 구조.
    세부 프로그램 시간·장소·연사는 확정 전이므로 코드에 박지 말고 이 구조로만 다룬다. */
+
+/* 접수 API 주소 (Cloudflare Worker, docs/deploy-worker.md)
+   비어 있으면 모의 API — GitHub Pages 시안에서 ?mock=reset|closed|full, ?t=demo-token 으로 확인.
+   운영 때 Worker 주소를 넣는다. 예: "https://rfw-api.<계정>.workers.dev/"
+   실제 모드에서는 서버 설정이 아래 기본값 위에 덮어써지고, 서버 설정을 못 받으면 아래 값을 그대로 쓴다. */
+window.RFW_API_BASE = "";
+
 window.RFW_CONFIG = {
   open: true,                                   // 접수 열기/닫기 (관리자 설정)
   closeAt: "2026-12-19T18:00:00+09:00",         // 사전 접수 마감 — 이후 자동으로 마감 안내

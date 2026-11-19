@@ -3,6 +3,7 @@
   'use strict';
 
   var API = window.AdminAPI;
+  var HOST = API.host || null; // Apps Script(api-gas.js)에서만 있음: 최상위 주소창 해시 맞추기
 
   /* ---------- 상수 ---------- */
   var DAY_LABEL = {
@@ -115,6 +116,7 @@
     }
     $('#lnkExport').setAttribute('href', '#/export?' + qs);
     $('#lnkEditFilter').setAttribute('href', '#/list?' + qs);
+    if (HOST) HOST.syncHash(location.hash);
   }
 
   function route(focus) {
@@ -1210,8 +1212,13 @@
     $('#btnStats').addEventListener('click', function () { exportStats('stats', this); });
     API.adminWhoAmI().then(function (me) { S.me = me; $('#whoami').textContent = me.name + ' · ' + me.email; }).catch(function () { $('#whoami').textContent = '계정 확인 실패'; });
     API.adminGetConfig().then(function (c) { renderOpenPill(c.open, c.closeAt); }).catch(function () {});
-    if (!location.hash) history.replaceState(null, '', '#/dashboard');
-    route(false);
+    function start(deep) {
+      if (deep) history.replaceState(null, '', '#' + deep); // Apps Script: 최상위 주소(…/exec#/list?…)의 깊은 링크
+      if (!location.hash) history.replaceState(null, '', '#/dashboard');
+      route(false);
+    }
+    if (HOST) HOST.initialHash().then(start, function () { start(''); });
+    else start('');
   }
   init();
 })();
