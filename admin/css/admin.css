@@ -156,6 +156,28 @@ main { min-width: 0; padding: var(--s4) var(--s4) var(--s6); outline: none; }
 .hbar__val { text-align: right; font-weight: 700; min-width: 72px; }
 .hbar__val small { color: var(--text-muted); font-weight: 500; margin-left: 6px; }
 
+/* ---------- 유입 경로 · 방문 대비 신청 (작은 표) ---------- */
+.conv-table { font-size: 13.5px; }
+.conv-table th, .conv-table td { padding: 0 12px; }
+.conv-table th:first-child, .conv-table td:first-child { padding-left: 0; }
+.conv-table th:last-child, .conv-table td:last-child { padding-right: 0; }
+.conv-table tbody th { font-weight: 600; line-height: 1.3; height: 52px; }
+.conv-table tbody th small { display: block; font-weight: 400; color: var(--text-muted); font-size: 12px; }
+.conv-table td.num { color: var(--text-sub); }
+.conv-table tfoot td.num { color: var(--text); }
+.conv-table thead th.num { width: 88px; }
+.conv-table thead th:last-child { width: 1%; }
+.conv__rate { display: inline-flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.conv__pct { display: inline-block; min-width: 3.6em; font-weight: 700; color: var(--text); }
+.conv__bar { display: block; width: 120px; height: 8px; background: var(--surface-3); border-radius: 0 4px 4px 0; overflow: hidden; }
+.conv__bar > span { display: block; height: 100%; background: var(--cyan); border-radius: 0 4px 4px 0; min-width: 2px; }
+.conv-note { margin-top: 12px; font-size: 12.5px; color: var(--text-muted); }
+@media (max-width: 560px) {
+  .conv-table th, .conv-table td { padding: 0 8px; }
+  .conv-table thead th.num { width: auto; }
+  .conv__bar { display: none; }
+}
+
 /* ---------- 정원 ---------- */
 .cap { display: flex; flex-direction: column; gap: 20px; }
 .cap__row { display: flex; flex-direction: column; gap: var(--s1); }

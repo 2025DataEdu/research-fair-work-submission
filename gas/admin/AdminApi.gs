@@ -82,7 +82,10 @@ function adminWhoAmI() {
    - total = 유효 신청, canceled = 지금 취소 상태, createdTotal = total + canceled
    - daily[].count: 신청일 기준 신규(이후 취소 포함), canceled·restored: 변경이력의 처리일 기준
    - daily[].cumulative: 그날 끝 기준 유효 신청. 마지막 값 = total (상태를 시트에서 손으로 바꾸지 않는 한)
-   - 날짜 범위: 첫 신청·처리일 ~ max(마지막 처리일, min(오늘, 마감일)), 빈 날은 0 */
+   - 날짜 범위: 첫 신청·처리일 ~ max(마지막 처리일, min(오늘, 마감일)), 빈 날은 0
+   - visits·visitSubmits: 방문집계 탭 전체 날짜 합(경로별 + total). 방문은 api 프로젝트가 시트에 반영한 것까지만
+     보인다(그쪽 캐시는 이 프로젝트에서 못 읽음). visitSubmits 는 취소 포함 접수 건수. conversion = 신청 ÷ 방문(방문 0 이면 null)
+   - visitsUpdatedAt: 방문수 마지막 반영 시각(방문집계 G1), 없으면 null */
 function adminGetSummary() {
   return adminRun_(function (me, ss) {
     var regs = readRegs_(ss), cfg = readConfig_(ss), hist = readHistory_(ss);
@@ -116,11 +119,14 @@ function adminGetSummary() {
     }
     var canceled = regs.filter(function (r) { return r.status === 'canceled'; }).length;
     var capOf = function (v) { return cfg.days.filter(function (d) { return d.value === v; })[0].capacity; };
+    var vs = readVisitStats_(ss);
     return {
       total: c.by.day1 + c.by.day2 + c.by.both, canceled: canceled, createdTotal: regs.length, byDay: c.by,
       perDate: { d22: c.d22, d23: c.d23 },
       capacity: { d22: capOf('day1'), d23: capOf('day2') },
-      daily: daily, bySrc: src, open: cfg.open, closeAt: cfg.closeAt, generatedAt: kstIso_()
+      daily: daily, bySrc: src, open: cfg.open, closeAt: cfg.closeAt, generatedAt: kstIso_(),
+      visits: vs.visits, visitSubmits: vs.submits, conversion: conversionOf_(vs.visits, vs.submits),
+      visitsDaily: vs.daily, visitsUpdatedAt: vs.updatedAt
     };
   }, '접수 현황을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.');
 }

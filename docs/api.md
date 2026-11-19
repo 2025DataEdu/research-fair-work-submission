@@ -25,7 +25,8 @@ Worker가 IP당 횟수 제한을 하고, Apps Script에는 Worker만 아는 비�
 - `phone`: 숫자만 저장(`01012345678`). 화면은 하이픈 자동 삽입. 검증: `^01[016789]\d{7,8}$`
 - `day`: `day1` | `day2` | `both`
 - `src`: 유입 경로 `?src=` 값(`sms` | `qr` | `web` | 없으면 `direct`). 이 넷이 아니면 `direct` 로 저장
-- `config` 에 `src` 를 붙이면 그날 그 유입경로의 방문수를 센다(없으면 세지 않음). 방문수는 캐시에 모았다가 1분에 한 번 시트에 더하는 근사치, 신청수는 신청 저장 때 바로 더해 정확
+- `config` 에 `src` 를 붙이면 그날 그 유입경로의 방문수를 센다(없으면 세지 않음). 참가자 화면은 탭 세션의 첫 `config` 에만 `src` 를 붙인다(sessionStorage) — 방문 = 브라우저 탭 단위, 개인 식별 없음. 방문수는 캐시에 모았다가 시트에 더하는 근사치, 신청수는 신청 저장 때 바로 더해 정확
+- 방문수 시트 반영(모두 api 프로젝트 스크립트 잠금 안): ① 방문이 들어왔을 때 마지막 반영이 60초(`API_VISIT_FLUSH_MS`)보다 오래됐으면 바로 ② `submit` 때 신청수와 같은 시트 쓰기로 ③ 매시간 트리거 `flushVisits`(조용해진 뒤 남은 꼬리). 방문이 이어지는 동안 관리자 화면 지연은 약 1분, 마지막 방문 뒤 조용하면 최대 1시간. 반영할 때마다 방문집계 탭 G1 에 시각을 남긴다
 - `config` 응답은 30초 캐시(신청·수정·취소 때 비움). 마감·정원 판단은 `submit`·`update` 때 캐시 없이 다시 한다
 - 같은 번호로 10분에 `submit` 5회를 넘으면 `RATE_LIMITED`. `resend` 는 같은 번호 1분에 1번만 실제로 보내고 응답은 언제나 `{sent:true}`(번호 존재·형식·횟수 초과를 드러내지 않음)
 - `submit` 은 `hp` 가 비어 있지 않으면 저장 없이 `{receiptNo:"RF26-0000-0000", …, token:""}` 로 성공한 척한다
@@ -43,7 +44,7 @@ Worker가 IP당 횟수 제한을 하고, Apps Script에는 Worker만 아는 비�
 **설정** (항목 | 값 | 설명): `open`, `closeAt`, `showSpeakers`, `capacity_day1`, `capacity_day2`(비우면 정원 없음), `tagline`·`program_day1`·`program_day2`(제목·날짜)·`contact`(JSON), `privacyUrl`, `dailyNotes`(관리자 일별 현황 메모 JSON `{"2026-12-01":"접수 오픈"}`, 참가자 설정에는 안 나감)
 **프로그램**: 날짜(day1/day2) | 시간 | 국문 | 영문 | 장소 | 장소(영문) | 강조(TRUE/FALSE) | 연사 — 한 항목 한 행, 행 순서 = 화면 순서
 **관리자로그**: 일시 | 이메일 | 행위(로그인/내보내기/수정/설정변경/파기) | 상세 — 상세는 JSON(`name`, 내보내기면 `kind`·`filterText`·`count`, 설정변경이면 `changes`, 수정이면 `receiptNo`·`detail`)
-**방문집계**: 날짜 | 유입경로 | 방문수 | 신청수
+**방문집계**: 날짜 | 유입경로 | 방문수 | 신청수 — 개인 정보 없이 날짜·경로별 숫자만. 신청수는 취소 포함 접수 건수. F1 = `방문수 마지막 반영`, G1 = 그 시각(+09:00, 글자 서식). 관리자(admin 프로젝트)는 api 프로젝트의 캐시·스크립트 속성을 읽지 못하고 `설정` 탭은 관리자 설정 저장이 통째로 다시 쓰므로, api 프로젝트만 쓰는 이 탭에 둔다
 
 ## 관리자 API (Apps Script `google.script.run`, 모든 함수가 허용 명단 확인)
 모든 함수는 예외를 던지지 않고 `{ok:true, data}` / `{ok:false, code, message, fields?}` 를 돌려준다. `data` 는 `admin/js/api.js` 모의 구현이 resolve 하는 값과 같은 모양(Date 없음, 시각은 +09:00 문자열). 오류 코드: `FORBIDDEN`(허용 명단 밖), `NOT_FOUND`, `VALIDATION`, `DUPLICATE`, `CANCELED`, `DAY_FULL`, `SERVER`
@@ -54,6 +55,7 @@ Worker가 IP당 횟수 제한을 하고, Apps Script에는 Worker만 아는 비�
 
 - `adminGetSummary()` `daily[]` 날짜 범위: 첫 신청·처리일 ~ max(마지막 처리일, min(오늘, 마감일)), 빈 날은 0. `note` 는 설정 탭 `dailyNotes`
 - `adminGetSummary()` 집계 기준: `total` = 유효 신청(상태 신청), `canceled` = 상태 취소, `createdTotal` = 신청일 기준 전체(= total + canceled). `daily[]` = `{date, count(신청일 기준 신규, 이후 취소 포함), canceled·restored(처리일 기준), cumulative(그날 끝 기준 유효 신청, 마지막 값 = total), note}`
+- `adminGetSummary()` 방문·신청 전환(방문집계 탭 전체 날짜 합, 개인 식별 없음): `visits` / `visitSubmits` = `{sms, qr, web, direct, total}`(모르는 경로는 direct), `conversion` = 같은 키로 신청 ÷ 방문(소수 넷째 자리, 방문 0 이면 `null`), `visitsDaily` = `[{date, visits, submits}]` 날짜순(행이 있는 날만), `visitsUpdatedAt` = 방문수 마지막 반영 시각(+09:00, 없으면 `null`). 방문은 시트에 반영된 것까지만 보이고, 신청(`visitSubmits`)은 취소 포함이라 `bySrc`(유효 신청)와 다를 수 있다. 반영 시점 차이로 날짜별·경로별 전환율이 잠깐 100% 를 넘을 수 있다
 - `adminList` 검색어가 숫자·하이픈·공백뿐이면 전화번호로 본다: 4자리는 뒷자리 일치, 5자리 이상은 부분 일치(`010-1234-5678`, `1234-5678`)
 - `adminLogExport` kind: `xlsx` | `csv` | `badge`(취소 제외 행만) | `stats` | `statsXlsx`(행 없음, 기록만)
 - `adminExportLog()` / `adminConfigLog()` / `adminAccessLog()`: 관리자로그 시트에서 행위가 각각 내보내기 / 설정변경 / 로그인인 행, 최근 순. 설정변경 행은 `changes`(사람이 읽는 변경 요약 문장 배열)를 가진다. 로그인 기록은 Apps Script 진입(`doGet`) 때 남긴다

@@ -74,7 +74,12 @@ function dropConfigCache_() { try { CacheService.getScriptCache().remove(API_CON
 
 /* 방문수 집계.
    방문마다 시트를 고치면 시트 쓰기(수백 ms)가 신청 저장과 같은 잠금을 두고 다투게 된다.
-   그래서 캐시에 날짜·유입경로별로 모아 두고(잠금은 캐시 읽기·쓰기 동안만, 수 ms) 1분에 한 번만 시트에 더한다.
+   그래서 캐시에 날짜·유입경로별로 모아 두고(잠금은 캐시 읽기·쓰기 동안만, 수 ms) 시트에는 몰아서 더한다.
+   반영 시점(모두 같은 스크립트 잠금 안):
+   - 방문이 들어왔을 때 마지막 반영이 1분(API_VISIT_FLUSH_MS)보다 오래됐으면 바로 → 방문이 이어지는 동안 지연은 1분 안
+   - 신청 저장 때 신청수와 같은 시트 쓰기로 → 신청이 그 신청을 만든 방문보다 먼저 잡히지 않는다
+   - 매시간 트리거(flushVisits) → 마지막 방문 뒤 조용해진 경우의 꼬리
+   반영할 때마다 방문집계 탭 G1 에 시각을 남긴다(관리자 화면 '마지막 반영').
    잠금을 1초 안에 못 잡거나 캐시가 비워지면 그 몇 건은 빠질 수 있다 — 방문수는 참고용 근사치다.
    신청수는 신청 저장 때 잠금 안에서 바로 시트에 더하므로 정확하다. */
 function visitHit_(src) {
@@ -87,7 +92,7 @@ function visitHit_(src) {
     pending[key] = (pending[key] || 0) + 1;
     var last = Number(cache.get('visit:flushedAt') || 0);
     if (Date.now() - last > API_VISIT_FLUSH_MS) {
-      flushVisitMap_(pending);
+      addVisitCounts_(rfwSpreadsheet_(), visitDeltas_(pending), kstIso_());
       pending = {};
       cache.put('visit:flushedAt', String(Date.now()), 21600);
     }
@@ -96,18 +101,30 @@ function visitHit_(src) {
     lock.releaseLock();
   }
 }
-function flushVisitMap_(pending) {
-  var deltas = Object.keys(pending).map(function (k) {
+function visitDeltas_(pending) {
+  return Object.keys(pending).map(function (k) {
     var parts = k.split('|');
     return { date: parts[0], src: parts[1], visits: pending[k], apps: 0 };
   });
-  if (deltas.length) addVisitCounts_(rfwSpreadsheet_(), deltas);
 }
-/** 모아 둔 방문수를 지금 시트에 반영 (편집기에서 수동 실행 또는 매시간 트리거) */
+/** 잠금 안에서: 모아 둔 방문(아직 비우지 않음). 캐시 오류는 [] — 신청 저장을 막지 않는다. */
+function pendingVisits_() {
+  try { return visitDeltas_(jsonParse_(CacheService.getScriptCache().get('visit:pending'), {}) || {}); }
+  catch (err) { console.warn('방문 캐시 읽기 실패: ' + err); return []; }
+}
+/** 잠금 안에서: 시트에 반영한 뒤 캐시를 비운다. */
+function clearPendingVisits_() {
+  try {
+    var cache = CacheService.getScriptCache();
+    cache.put('visit:pending', '{}', 21600);
+    cache.put('visit:flushedAt', String(Date.now()), 21600);
+  } catch (err) { console.warn('방문 캐시 비우기 실패: ' + err); }
+}
+/** 모아 둔 방문수를 지금 시트에 반영 (편집기에서 수동 실행 또는 매시간 트리거). 모아 둔 것이 없어도 반영 시각은 남긴다. */
 function flushVisits() {
   withLock_(function () {
     var cache = CacheService.getScriptCache();
-    flushVisitMap_(jsonParse_(cache.get('visit:pending'), {}) || {});
+    addVisitCounts_(rfwSpreadsheet_(), visitDeltas_(jsonParse_(cache.get('visit:pending'), {}) || {}), kstIso_());
     cache.put('visit:pending', '{}', 21600);
     cache.put('visit:flushedAt', String(Date.now()), 21600);
   });
@@ -138,7 +155,10 @@ function apiSubmit_(p) {
       consentAt: now, lang: normLang_(p.lang), src: normSrc_(p.src), token: newToken_()
     };
     appendReg_(ss, r);
-    addVisitCounts_(ss, [{ date: now.slice(0, 10), src: r.src, visits: 0, apps: 1 }]);
+    var pendingVisits = pendingVisits_();           // 모아 둔 방문도 같은 시트 쓰기로 반영
+    addVisitCounts_(ss, pendingVisits.concat([{ date: now.slice(0, 10), src: r.src, visits: 0, apps: 1 }]),
+      pendingVisits.length ? now : null);
+    if (pendingVisits.length) clearPendingVisits_();
     return r;
   });
   dropConfigCache_();

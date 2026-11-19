@@ -584,6 +584,73 @@ section('번호별 횟수 제한');
   check('같은 번호 10분 5회 넘으면 RATE_LIMITED', seen.join() === 'ok,DUPLICATE,DUPLICATE,DUPLICATE,DUPLICATE,RATE_LIMITED', seen);
 }
 
+/* =================== 15-1. 방문·신청 전환 =================== */
+section('방문·신청 전환 (방문집계 → adminGetSummary)');
+{
+  const vs = tab('방문집계');
+  const visitRow = (src) => vs.getRange(2, 1, vs.getLastRow() - 1, 4).getValues().find((r) => r[0] === kstNow().slice(0, 10) && r[1] === src) || ['', src, 0, 0];
+  const cache = api.ctx.CacheService.getScriptCache();
+  const isoRe = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\+09:00$/;
+  check('반영 시각: 방문집계 F1·G1 (글자 서식)', vs.get(1, 6) === '방문수 마지막 반영' && isoRe.test(vs.get(1, 7)) && vs.fmt(1, 7) === '@', [vs.get(1, 6), vs.get(1, 7)]);
+  check('머리행 A~D 그대로', deepEq(vs.getRange(1, 1, 1, 4).getValues()[0], ['날짜', '유입경로', '방문수', '신청수']));
+
+  // 1) 기회 반영: 마지막 반영이 1분 안이면 캐시에만, 1분이 지나면 다음 방문 때 시트로
+  const qr0 = visitRow('qr')[2];
+  cache.put('visit:flushedAt', String(Date.now() - 30000), 21600);
+  post({ action: 'config', src: 'qr' });
+  check('1분 안: 시트에 아직 없음(캐시에 모음)', visitRow('qr')[2] === qr0 && JSON.parse(cache.get('visit:pending'))[kstNow().slice(0, 10) + '|qr'] === 1);
+  const seen0 = A('adminGetSummary').data.visits.qr;
+  check('관리자는 반영 전 방문을 못 봄', seen0 === qr0, { seen0, qr0 });
+  cache.put('visit:flushedAt', String(Date.now() - 61000), 21600);
+  vs.set(1, 7, '2000-01-01T00:00:00+09:00');
+  post({ action: 'config', src: 'qr' });
+  check('1분 지남: 다음 방문 때 모아 둔 것까지 시트에', visitRow('qr')[2] === qr0 + 2 && cache.get('visit:pending') === '{}', visitRow('qr'));
+  check('반영 시각 갱신', vs.get(1, 7) > '2000-01-01T00:00:00+09:00' && isoRe.test(vs.get(1, 7)), vs.get(1, 7));
+  check('관리자는 반영된 방문을 봄', A('adminGetSummary').data.visits.qr === qr0 + 2);
+
+  // 2) 신청 저장 때 모아 둔 방문도 같은 쓰기로
+  cache.put('visit:flushedAt', String(Date.now()), 21600);
+  const web0 = visitRow('web');
+  post({ action: 'config', src: 'web' });
+  check('방문 캐시에만', visitRow('web')[2] === web0[2]);
+  vs.set(1, 7, '2000-01-01T00:00:00+09:00');
+  const sub = post({ action: 'submit', ...person({ day: 'day2', src: 'web' }) });
+  const web1 = visitRow('web');
+  check('신청 저장 때 모아 둔 방문 함께 반영', sub.ok && web1[2] === web0[2] + 1 && web1[3] === web0[3] + 1 && cache.get('visit:pending') === '{}', { web0, web1 });
+  check('신청 저장 때 반영 시각 갱신', isoRe.test(vs.get(1, 7)) && vs.get(1, 7) > '2000-01-01T00:00:00+09:00');
+  const stampBefore = vs.get(1, 7);
+  post({ action: 'submit', ...person({ day: 'day2', src: 'web' }) });
+  check('모아 둔 방문이 없으면 신청은 반영 시각을 건드리지 않음', vs.get(1, 7) === stampBefore);
+
+  // 3) 매시간 트리거: 모아 둔 것이 없어도 반영 시각은 남김
+  vs.set(1, 7, '2000-01-01T00:00:00+09:00');
+  api.ctx.flushVisits();
+  check('flushVisits: 빈 캐시도 반영 시각 갱신', vs.get(1, 7) > '2000-01-01T00:00:00+09:00');
+
+  // 4) 집계 계산: 방문집계를 알려진 값으로 바꿔 확인 후 되돌림
+  const saved = new Map(vs.cells);
+  for (const k of [...vs.cells.keys()]) if (Number(k.split(',')[0]) >= 2) vs.cells.delete(k);
+  [['2026-12-01', 'sms', 10, 4], ['2026-12-01', 'qr', 5, 0], ['2026-12-02', 'sms', 6, 2], ['2026-12-02', 'web', 0, 1], ['2026-12-02', 'evil', 3, 1]]
+    .forEach((r, i) => r.forEach((v, j) => vs.cells.set(`${i + 2},${j + 1}`, v)));
+  vs.cells.set('7,1', vm.runInContext("new Date('2026-12-03T01:00:00Z')", admin.ctx));          // 사람이 고쳐 Date 가 된 날짜 칸
+  vs.cells.set('7,2', 'direct'); vs.cells.set('7,3', 1); vs.cells.set('7,4', 0);
+  vs.cells.set('1,7', '2026-12-03T10:00:00+09:00');
+  const d = A('adminGetSummary').data;
+  check('visits 경로별·합계 (모르는 경로 → direct)', deepEq(d.visits, { sms: 16, qr: 5, web: 0, direct: 4, total: 25 }), d.visits);
+  check('visitSubmits 경로별·합계', deepEq(d.visitSubmits, { sms: 6, qr: 0, web: 1, direct: 1, total: 8 }), d.visitSubmits);
+  check('conversion = 신청 ÷ 방문, 방문 0 이면 null', deepEq(d.conversion, { sms: 0.375, qr: 0, web: null, direct: 0.25, total: 0.32 }), d.conversion);
+  check('visitsDaily 날짜순', deepEq(d.visitsDaily, [{ date: '2026-12-01', visits: 15, submits: 4 }, { date: '2026-12-02', visits: 9, submits: 4 }, { date: '2026-12-03', visits: 1, submits: 0 }]), d.visitsDaily);
+  check('visitsUpdatedAt = G1', d.visitsUpdatedAt === '2026-12-03T10:00:00+09:00', d.visitsUpdatedAt);
+  vs.cells.set('1,7', vm.runInContext("new Date('2026-12-03T01:05:00Z')", admin.ctx));
+  check('visitsUpdatedAt: Date 칸도 +09:00', A('adminGetSummary').data.visitsUpdatedAt === '2026-12-03T10:05:00+09:00');
+  vs.cells.delete('1,7');
+  for (const k of [...vs.cells.keys()]) if (Number(k.split(',')[0]) >= 2) vs.cells.delete(k);
+  const empty = A('adminGetSummary').data;
+  check('방문집계 비어 있으면 0·null', empty.visits.total === 0 && empty.conversion.total === null && empty.visitsDaily.length === 0 && empty.visitsUpdatedAt === null, empty);
+  vs.cells = saved;
+  check('개인 정보 없음(숫자·날짜만)', !JSON.stringify({ a: d.visits, b: d.visitSubmits, c: d.visitsDaily }).match(/010|@|김전북/));
+}
+
 /* =================== 16. 트리거·백업 =================== */
 section('트리거 · 백업');
 {

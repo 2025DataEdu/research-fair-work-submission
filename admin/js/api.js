@@ -166,6 +166,24 @@
     });
   })();
 
+  /* ---------- 방문집계 (날짜 | 유입경로 | 방문수 | 신청수) ----------
+     신청수 = 그날 그 경로로 들어온 신청(취소 포함) — 위 모의 신청 180건과 맞춘다.
+     방문수 = 신청수 ÷ 경로별 전환율(±15%) + 신청 없이 둘러본 몇 명. 신청 생성 뒤에 만들어 위 모의 데이터는 그대로다. */
+  var VISIT_RATE = { sms: 0.55, qr: 0.36, web: 0.27, direct: 0.45 };
+  var VISITS_UPDATED_AT = '2026-12-18T23:49:12+09:00';
+  var visitRows = (function () {
+    var apps = {}, out = [];
+    regs.forEach(function (r) { var k = r.createdAt.slice(0, 10) + '|' + r.src; apps[k] = (apps[k] || 0) + 1; });
+    for (var d = 1; d <= 18; d++) {
+      ['sms', 'qr', 'web', 'direct'].forEach(function (src) {
+        var date = '2026-12-' + pad(d, 2), a = apps[date + '|' + src] || 0;
+        var v = Math.max(a, Math.round(a / VISIT_RATE[src] * (0.85 + rnd() * 0.3)) + Math.floor(rnd() * 4));
+        if (v || a) out.push({ date: date, src: src, visits: v, apps: a });
+      });
+    }
+    return out;
+  })();
+
   /* ---------- 설정 ---------- */
   var config = (function () {
     var base = global.RFW_CONFIG ? clone(global.RFW_CONFIG) : {
@@ -270,7 +288,9 @@
        - total: 유효 신청(현재 상태 '신청'), canceled: 현재 상태 '취소', createdTotal = total + canceled (신청일 기준 전체)
        - daily[].count: 그날 새로 들어온 신청(신청일 기준, 이후 취소된 건 포함)
        - daily[].canceled / restored: 그날 처리된 취소·복원(처리일 기준)
-       - daily[].cumulative: 그날 끝 기준 유효 신청 = 누적 신규 − 누적 취소 + 누적 복원. 마지막 값 = total */
+       - daily[].cumulative: 그날 끝 기준 유효 신청 = 누적 신규 − 누적 취소 + 누적 복원. 마지막 값 = total
+       - visits / visitSubmits: 방문집계 합(경로별 + total), visitSubmits 는 취소 포함 접수. conversion = 신청 ÷ 방문
+       - visitsDaily: [{date, visits, submits}], visitsUpdatedAt: 방문수 마지막 반영 시각 */
     adminGetSummary: function () {
       if (failing('summary')) return fail('SERVER', '접수 현황을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.');
       var c = counts();
@@ -293,11 +313,23 @@
         cum += n - cx + rs;
         daily.push({ date: key, count: n, canceled: cx, restored: rs, cumulative: cum, note: PROMOS[d] || '' });
       }
+      // 방문·신청 전환 (방문집계 전체 날짜 합, 개인 식별 없음). 방문 0 이면 전환율 null
+      var visits = { sms: 0, qr: 0, web: 0, direct: 0, total: 0 }, vsub = { sms: 0, qr: 0, web: 0, direct: 0, total: 0 }, vday = {};
+      visitRows.forEach(function (v) {
+        visits[v.src] += v.visits; visits.total += v.visits;
+        vsub[v.src] += v.apps; vsub.total += v.apps;
+        var x = vday[v.date] || (vday[v.date] = { date: v.date, visits: 0, submits: 0 });
+        x.visits += v.visits; x.submits += v.apps;
+      });
+      var conversion = {};
+      Object.keys(visits).forEach(function (k) { conversion[k] = visits[k] > 0 ? Math.round(vsub[k] / visits[k] * 10000) / 10000 : null; });
       return wait({
         total: c.by.day1 + c.by.day2 + c.by.both, canceled: canceled, createdTotal: regs.length, byDay: c.by,
         perDate: { d22: c.d22, d23: c.d23 },
         capacity: { d22: capOf('day1'), d23: capOf('day2') },
-        daily: daily, bySrc: src, open: config.open, closeAt: config.closeAt, generatedAt: nowIso()
+        daily: daily, bySrc: src, open: config.open, closeAt: config.closeAt, generatedAt: nowIso(),
+        visits: visits, visitSubmits: vsub, conversion: conversion,
+        visitsDaily: Object.keys(vday).sort().map(function (k) { return vday[k]; }), visitsUpdatedAt: VISITS_UPDATED_AT
       });
     },
 

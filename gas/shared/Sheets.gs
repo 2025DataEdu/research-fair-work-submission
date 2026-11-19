@@ -208,9 +208,19 @@ function readAdminLog_(ss, action) {
   }));
 }
 
-/* ---------- 방문집계 (날짜 | 유입경로 | 방문수 | 신청수) ---------- */
-/** deltas: [{date, src, visits, apps}] 를 더한다. 잠금 안에서만 부른다. */
-function addVisitCounts_(ss, deltas) {
+/* ---------- 방문집계 (날짜 | 유입경로 | 방문수 | 신청수) ----------
+   마지막 반영 시각은 같은 탭 머리행 오른쪽 F1(이름)·G1(값)에 둔다. 표(A~D)와 한 칸 띄워 데이터 행과 섞이지 않는다.
+   api 프로젝트의 캐시·스크립트 속성은 admin 프로젝트가 읽지 못하고, '설정' 탭은 관리자 설정 저장이
+   다른 잠금(admin 프로젝트)으로 통째로 다시 쓰므로 api 쪽 쓰기와 겹칠 수 있다. 방문집계 탭은 api 프로젝트만 쓴다. */
+var VISIT_STAMP_LABEL = '방문수 마지막 반영';
+
+/** deltas: [{date, src, visits, apps}] 를 더한다. stampIso 가 있으면 마지막 반영 시각도 쓴다. 잠금 안에서만 부른다. */
+function addVisitCounts_(ss, deltas, stampIso) {
+  if (stampIso) {
+    var st = sheet_(ss, RFW_SHEET.VISIT).getRange(1, 6, 1, 2);
+    st.setNumberFormat('@');                       // ISO 문자열이 날짜로 바뀌지 않게
+    st.setValues([[VISIT_STAMP_LABEL, stampIso]]);
+  }
   if (!deltas.length) return;
   var sh = sheet_(ss, RFW_SHEET.VISIT);
   var rows = dataRows_(sh, 4), index = {};
@@ -225,4 +235,36 @@ function addVisitCounts_(ss, deltas) {
     rows[i][3] = (Number(rows[i][3]) || 0) + (d.apps || 0);
   });
   sh.getRange(2, 1, rows.length, 4).setValues(rows);
+}
+
+/** 방문집계 전체 합계 (관리자 집계용). 개인 정보 없음 — 날짜·경로별 숫자만.
+    {visits:{sms,qr,web,direct,total}, submits:{…}, daily:[{date, visits, submits}], updatedAt: ISO|null} */
+function readVisitStats_(ss) {
+  var sh = sheet_(ss, RFW_SHEET.VISIT);
+  var zero = function () { return { sms: 0, qr: 0, web: 0, direct: 0, total: 0 }; };
+  var visits = zero(), submits = zero(), perDay = {};
+  dataRows_(sh, 4).forEach(function (row) {
+    var date = cellIso_(row[0]).slice(0, 10);
+    if (!date) return;
+    var src = normSrc_(cellStr_(row[1]));
+    var v = Math.max(0, Number(row[2]) || 0), a = Math.max(0, Number(row[3]) || 0);
+    visits[src] += v; visits.total += v;
+    submits[src] += a; submits.total += a;
+    var d = perDay[date] || (perDay[date] = { date: date, visits: 0, submits: 0 });
+    d.visits += v; d.submits += a;
+  });
+  var stamp = cellIso_(sh.getRange(1, 7, 1, 1).getValues()[0][0]);
+  return {
+    visits: visits, submits: submits,
+    daily: Object.keys(perDay).sort().map(function (k) { return perDay[k]; }),
+    updatedAt: stamp || null
+  };
+}
+/** 신청 ÷ 방문 (소수 넷째 자리). 방문이 0 이면 null */
+function conversionOf_(visits, submits) {
+  var out = {};
+  ['sms', 'qr', 'web', 'direct', 'total'].forEach(function (k) {
+    out[k] = visits[k] > 0 ? Math.round(submits[k] / visits[k] * 10000) / 10000 : null;
+  });
+  return out;
 }

@@ -215,11 +215,7 @@
           '<div class="cap__foot tnum"><span>' + Math.round(r * 100) + '% 찼어요</span><span>' + (left > 0 ? '남은 자리 ' + fmtN(left) + '석' : '초과 ' + fmtN(-left) + '명') + '</span></div></div>';
       }).join('') + '</div>';
 
-    // 유입 경로 (유효 신청 기준)
-    var src = s.bySrc, maxSrc = Math.max(src.sms, src.qr, src.web, src.direct, 1);
-    $('#srcBreak').innerHTML = '<ul class="hbars">' + ['sms', 'qr', 'web', 'direct'].map(function (k) {
-      return hbar(SRC_LABEL[k], SRC_SUB[k], src[k], maxSrc, '건', s.total);
-    }).join('') + '</ul>';
+    renderConversion(s);
 
     $('#trendRecon').innerHTML = '신청일 기준 신규 합계 <b>' + fmtN(s.createdTotal) + '</b>건 = 유효 <b>' + fmtN(s.total) + '</b> + 취소 <b>' + fmtN(s.canceled) + '</b>' +
       (sumOf(s.daily, 'restored') ? ' <span class="recon__note">(취소 처리 ' + fmtN(sumOf(s.daily, 'canceled')) + '건 중 ' + fmtN(sumOf(s.daily, 'restored')) + '건은 복원)</span>' : '');
@@ -227,6 +223,39 @@
     renderTrendTable();
   }
   function sumOf(list, key) { return list.reduce(function (a, d) { return a + (d[key] || 0); }, 0); }
+
+  /* ---------- 유입 경로: 방문 → 신청 전환 (방문집계, 개인 식별 없음) ---------- */
+  var SRC_KEYS = ['sms', 'qr', 'web', 'direct'];
+  var ZERO_SRC = { sms: 0, qr: 0, web: 0, direct: 0, total: 0 };
+  // 0.4722 → '47.2%', null(방문 0) → '–'
+  function convPct(c) { return c == null ? null : Math.round(c * 1000) / 10; }
+  function convText(c) { var p = convPct(c); return p == null ? '–' : p.toFixed(1) + '%'; }
+  function visitsAsOf(s) {
+    var at = s.visitsUpdatedAt;
+    if (!at) return '아직 반영된 방문이 없어요';
+    var same = s.generatedAt && at.slice(0, 10) === s.generatedAt.slice(0, 10);
+    return '마지막 반영 ' + (same ? '' : fmtDateKo(at.slice(0, 10)) + ' ') + at.slice(11, 16);
+  }
+  function renderConversion(s) {
+    var v = s.visits || ZERO_SRC, a = s.visitSubmits || ZERO_SRC, c = s.conversion || {};
+    function cells(k) {
+      var p = convPct(c[k]);
+      return '<td class="num">' + fmtN(v[k]) + '</td><td class="num">' + fmtN(a[k]) + '</td>' +
+        '<td class="num"><span class="conv__rate">' +
+        (p == null ? '' : '<span class="conv__bar" aria-hidden="true"><span style="width:' + Math.min(100, p) + '%"></span></span>') +
+        '<span class="conv__pct">' + convText(c[k]) + '</span></span></td>';
+    }
+    var rows = SRC_KEYS.map(function (k) {
+      return '<tr><th scope="row"><span class="conv__src">' + SRC_LABEL[k] + '</span><small>' + esc(SRC_SUB[k]) + '</small></th>' + cells(k) + '</tr>';
+    }).join('');
+    $('#srcBreak').innerHTML =
+      '<div class="table-wrap table-wrap--compact conv-wrap"><table class="data-table data-table--plain conv-table">' +
+      '<caption class="sr-only">유입 경로별 방문, 신청, 전환율. 방문은 브라우저 탭 단위로 한 번만 센 값, 신청은 취소 포함 접수 건수, 전환율은 신청 나누기 방문이에요.</caption>' +
+      '<thead><tr><th scope="col">경로</th><th scope="col" class="num">방문</th><th scope="col" class="num">신청</th><th scope="col" class="num">전환율</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody>' +
+      '<tfoot><tr class="is-total"><th scope="row">합계</th>' + cells('total') + '</tr></tfoot></table></div>' +
+      '<p class="conv-note">방문은 브라우저 탭 단위로 한 번만 세고 개인을 식별하지 않아요 · 약 1분마다 반영 (' + visitsAsOf(s) + ')</p>';
+  }
 
   /* ---------- 일별 추이 차트 (손으로 그린 SVG, 공유 x축 2단: 막대=신청일 기준 신규, 선=유효 누적) ---------- */
   var trend = { active: -1, geo: null };
@@ -419,10 +448,23 @@
       ['문자 (sms)', s.bySrc.sms, ''], ['포스터 QR (qr)', s.bySrc.qr, ''], ['홈페이지 (web)', s.bySrc.web, ''], ['직접 접속 (direct)', s.bySrc.direct, ''],
       ['합계', s.bySrc.sms + s.bySrc.qr + s.bySrc.web + s.bySrc.direct, '= 유효 신청'],
       [],
+      ['[방문·신청 전환율] 기준: 방문 = 브라우저 탭 단위 첫 접속(개인 식별 없음) · 신청 = 그 경로로 접수된 전체 건(취소 포함) · 전환율 = 신청 ÷ 방문', '방문', '신청(건)', '전환율(%)'],
+      ['문자 (sms)'].concat(convRow(s, 'sms')), ['포스터 QR (qr)'].concat(convRow(s, 'qr')),
+      ['홈페이지 (web)'].concat(convRow(s, 'web')), ['직접 접속 (direct)'].concat(convRow(s, 'direct')),
+      ['합계'].concat(convRow(s, 'total')),
+      ['방문수 마지막 반영', s.visitsUpdatedAt ? fmtDT(s.visitsUpdatedAt, true) : '없음', '방문수는 약 1분마다 반영하는 근사치'],
+      [],
       ['[일별 추이] 기준: 신규 = 신청일 기준(나중에 취소된 건 포함) · 취소·복원 = 처리일 기준 · 유효 누적 = 그날 끝 기준'],
       ['날짜', '신규 신청(건)', '취소 처리(건)', '복원(건)', '유효 누적(명)', '비고']
     ].concat(s.daily.map(function (d) { return [d.date, d.count, d.canceled, d.restored, d.cumulative, d.note || '']; }))
-      .concat([['합계', sumOf(s.daily, 'count'), sc, sr, s.total, '신규 − 취소 처리 + 복원 = 유효 신청' + (sr ? ' (취소 처리 ' + sc + '건 중 ' + sr + '건 복원 → 지금 취소 ' + s.canceled + '건)' : '')]]);
+      .concat([['합계', sumOf(s.daily, 'count'), sc, sr, s.total, '신규 − 취소 처리 + 복원 = 유효 신청' + (sr ? ' (취소 처리 ' + sc + '건 중 ' + sr + '건 복원 → 지금 취소 ' + s.canceled + '건)' : '')]])
+      .concat([[], ['[일별 방문·신청] 기준: 방문 = 접속한 날(KST) · 신청 = 신청일 기준(취소 포함)'], ['날짜', '방문', '신청(건)', '전환율(%)']])
+      .concat((s.visitsDaily || []).map(function (d) { return [d.date, d.visits, d.submits, d.visits ? convPct(d.submits / d.visits) : '']; }));
+  }
+  // 경로별 [방문, 신청, 전환율(%)] — 방문 0 이면 전환율 빈칸
+  function convRow(s, k) {
+    var v = (s.visits || ZERO_SRC)[k], a = (s.visitSubmits || ZERO_SRC)[k], c = (s.conversion || {})[k];
+    return [v, a, c == null ? '' : convPct(c)];
   }
 
   function exportStats(kind, btn) {
