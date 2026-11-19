@@ -17,7 +17,7 @@ const MAX_BODY = 4 * 1024;
 const UPSTREAM_TIMEOUT_MS = 15000;
 const CONFIG_TTL = 30; // 초
 
-const DEFAULT_ORIGINS = "https://2025dataedu.github.io,http://localhost:8787,http://127.0.0.1:8787";
+const DEFAULT_ORIGINS = "https://rfw2026.pages.dev,http://localhost:8787,http://127.0.0.1:8787";
 
 /* ── 설정 캐시와 방문 집계 ──
    config 요청은 페이지를 열 때마다 오므로 Apps Script 호출의 대부분을 차지한다.

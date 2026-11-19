@@ -19,7 +19,7 @@ const DIST = path.join(GAS, 'dist');
 const args = process.argv.slice(2);
 const opt = (name) => { const a = args.find((x) => x === '--' + name || x.startsWith('--' + name + '=')); return a == null ? null : (a.includes('=') ? a.slice(a.indexOf('=') + 1) : true); };
 // 관리자 화면의 '접수 페이지 보기' 링크. 상대 경로(../web/index.html)는 Apps Script 에서 의미가 없어 절대 주소로 바꾼다.
-const SITE = opt('site') || process.env.RFW_SITE_URL || 'https://2025dataedu.github.io/research-fair-work-submission/web/';
+const SITE = opt('site') || process.env.RFW_SITE_URL || 'https://rfw2026.pages.dev/';
 const PREVIEW = !!opt('preview');
 
 const CLASP_SRC = 'clasp.json'; // gas/<p>/clasp.json (rootDir "") → dist/<p>/.clasp.json

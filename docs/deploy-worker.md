@@ -39,10 +39,10 @@ npx wrangler whoami       # 로그인된 계정 확인
 ```toml
 [vars]
 GAS_URL = "https://script.google.com/macros/s/<배포 ID>/exec"
-ALLOWED_ORIGINS = "https://2025dataedu.github.io,http://localhost:8787,http://127.0.0.1:8787"
+ALLOWED_ORIGINS = "https://rfw2026.pages.dev,http://localhost:8787,http://127.0.0.1:8787"
 ```
 
-- `ALLOWED_ORIGINS`: 참가자 화면이 열리는 **출처**(프로토콜+도메인+포트, 경로·끝 `/` 없이). GitHub Pages 는 `https://2025dataedu.github.io` 하나로 충분하다(저장소 경로는 출처에 포함되지 않는다). Cloudflare Pages 로 옮기면 `https://<프로젝트>.pages.dev` 와 학교·별도 도메인을 쉼표로 덧붙인다
+- `ALLOWED_ORIGINS`: 참가자 화면이 열리는 **출처**(프로토콜+도메인+포트, 경로·끝 `/` 없이). 운영 참가자 화면은 Cloudflare Pages `https://rfw2026.pages.dev` 다. GitHub Pages 시안은 모의 API 만 쓰므로 넣지 않는다. 학교·별도 도메인이 생기면 쉼표로 덧붙이고, `web/js/config.js` 의 `RFW_LIVE_HOSTS` 에도 같은 호스트를 넣는다
 - `GAS_URL` 은 비밀은 아니지만, 공개 저장소에 올리고 싶지 않으면 `npx wrangler secret put GAS_URL` 로 넣고 `wrangler.toml` 에서는 그 줄을 지운다(같은 이름을 변수와 비밀값 양쪽에 두지 않는다)
 
 ## 3. 배포와 비밀값
@@ -64,7 +64,7 @@ curl https://rfw-api.<하위도메인>.workers.dev/health
 # {"ok":true,"data":{"service":"rfw-api","upstream":true,"key":true}}
 #  upstream:false → GAS_URL 비어 있음,  key:false → GAS_KEY 비밀값 없음
 
-curl -H "Origin: https://2025dataedu.github.io" \
+curl -H "Origin: https://rfw2026.pages.dev" \
      -H "Content-Type: text/plain;charset=utf-8" \
      --data '{"action":"config"}' \
      https://rfw-api.<하위도메인>.workers.dev/
@@ -145,3 +145,9 @@ npm run dev                           # http://127.0.0.1:8787 — 로그인 없�
 | 모든 요청이 `SERVER`, 로그에 `upstream non-JSON` | `GAS_URL` 이 `/exec` 가 아니거나(`/dev` 는 로그인 필요), 웹앱 액세스가 '모든 사용자'가 아니다 |
 | 브라우저 콘솔에 CORS 오류, 응답 403 | 화면 출처가 `ALLOWED_ORIGINS` 에 없다 |
 | 신청 화면에 '요청이 너무 많아요' | 같은 IP 에서 1분 안에 쓰기 10회 초과. 한도 조정은 7장 |
+
+## 참가자 화면 운영 배포 (Cloudflare Pages)
+- 프로젝트 `rfw2026` (직접 업로드 방식, Git 연결 없음) → `https://rfw2026.pages.dev`
+- 배포: 저장소 밖 폴더에서 `npx wrangler pages deploy <저장소>/web --project-name rfw2026 --branch main` (worker 폴더 안에서 실행하면 Worker 설정을 집어 들 수 있으니 피한다)
+- `web/_redirects`: `/admin` → 관리자 Apps Script 웹앱 주소(302). 관리자 배포 주소가 바뀌면 함께 고친다
+- `main` 병합은 GitHub Pages 시안에만 반영되고, 운영 주소는 위 명령으로 따로 배포해야 바뀐다

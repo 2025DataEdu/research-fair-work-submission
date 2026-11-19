@@ -3,10 +3,13 @@
    세부 프로그램 시간·장소·연사는 확정 전이므로 코드에 박지 말고 이 구조로만 다룬다. */
 
 /* 접수 API 주소 (Cloudflare Worker, docs/deploy-worker.md)
-   비어 있으면 모의 API — GitHub Pages 시안에서 ?mock=reset|closed|full, ?t=demo-token 으로 확인.
-   운영 때 Worker 주소를 넣는다. 예: "https://rfw-api.<계정>.workers.dev/"
+   운영 주소(rfw2026.pages.dev)에서 열릴 때만 실제 Worker 를 부른다.
+   그 밖의 주소(GitHub Pages 시안, localhost)는 모의 API — ?mock=reset|closed|full, ?t=demo-token 으로 확인.
    실제 모드에서는 서버 설정이 아래 기본값 위에 덮어써지고, 서버 설정을 못 받으면 아래 값을 그대로 쓴다. */
-window.RFW_API_BASE = "https://rfw-api.rfw2026.workers.dev/";
+window.RFW_LIVE_HOSTS = ["rfw2026.pages.dev"];
+window.RFW_API_BASE = window.RFW_LIVE_HOSTS.indexOf(location.hostname) >= 0
+  ? "https://rfw-api.rfw2026.workers.dev/"
+  : "";
 
 window.RFW_CONFIG = {
   open: true,                                   // 접수 열기/닫기 (관리자 설정)

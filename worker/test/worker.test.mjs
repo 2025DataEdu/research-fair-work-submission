@@ -3,7 +3,7 @@ import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import worker from "../src/index.js";
 
-const ORIGIN = "https://2025dataedu.github.io";
+const ORIGIN = "https://rfw2026.pages.dev";
 const GAS_URL = "https://script.google.com/macros/s/TEST/exec";
 const realFetch = globalThis.fetch;
 
