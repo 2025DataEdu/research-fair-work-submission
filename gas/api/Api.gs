@@ -265,15 +265,15 @@ var API_DAY_TEXT = {
 function editLink_(r) { return String(prop_('SITE_URL')).replace(/\/+$/, '') + '/?t=' + encodeURIComponent(r.token); }
 function confirmText_(r) {
   if (r.lang === 'en') {
-    return '[2026 JBNU-G Research Fair Week] ' + r.name + ', your registration is confirmed. No. ' + r.receiptNo +
+    return '[2026 JBNU-BK Research Fair Week] ' + r.name + ', your registration is confirmed. No. ' + r.receiptNo +
       ' / ' + API_DAY_TEXT.en[r.day] + '. Edit or cancel: ' + editLink_(r);
   }
-  return '[2026 JBNU-G 리서치페어 위크] ' + r.name + '님, 신청이 접수됐어요. 접수번호 ' + r.receiptNo +
+  return '[2026 JBNU-BK 리서치페어 위크] ' + r.name + '님, 신청이 접수됐어요. 접수번호 ' + r.receiptNo +
     ' / 참석일 ' + API_DAY_TEXT.ko[r.day] + '. 수정·취소: ' + editLink_(r);
 }
 function linkText_(r) {
-  if (r.lang === 'en') return '[2026 JBNU-G Research Fair Week] Your link to edit or cancel (' + r.receiptNo + '): ' + editLink_(r);
-  return '[2026 JBNU-G 리서치페어 위크] 신청 확인·수정·취소 링크예요(' + r.receiptNo + '). ' + editLink_(r);
+  if (r.lang === 'en') return '[2026 JBNU-BK Research Fair Week] Your link to edit or cancel (' + r.receiptNo + '): ' + editLink_(r);
+  return '[2026 JBNU-BK 리서치페어 위크] 신청 확인·수정·취소 링크예요(' + r.receiptNo + '). ' + editLink_(r);
 }
 
 /** 문자 발송. SMS_PROVIDER 가 비어 있으면 로그만 남기는 스텁(성공으로 본다). 실패해도 예외를 던지지 않는다. */

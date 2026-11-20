@@ -23,8 +23,8 @@
   var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
   var ID_RE = /^[a-z0-9_-]{1,24}$/;
   var ORIGINAL = {
-    title: '2026 JBNU-G 리서치페어 위크 참가 신청',
-    intro: '전북대학교의 연구성과를 나누고 대학과 지역의 미래 발전 방향을 함께 모색하는 2026 JBNU-G 리서치페어 위크에 여러분을 초대합니다. 대학원생과 연구자의 발표를 통해 BK21 4단계의 성과를 살펴보고, 이를 바탕으로 5단계의 추진 과제와 지역 기업·연구기관과의 새로운 협력 기회를 논의합니다.',
+    title: '2026 JBNU-BK 리서치페어 위크 참가 신청',
+    intro: '전북대학교의 연구성과를 나누고 대학과 지역의 미래 발전 방향을 함께 모색하는 2026 JBNU-BK 리서치페어 위크에 여러분을 초대합니다. 대학원생과 연구자의 발표를 통해 BK21 4단계의 성과를 살펴보고, 이를 바탕으로 5단계의 추진 과제와 지역 기업·연구기관과의 새로운 협력 기회를 논의합니다.',
     when: '▪일정 : 2026년 12월 22일(화)~23일(수) ▪장소 : 전북대학교 진수당',
     lead: '참가를 희망하시는 분은 아래 항목을 작성해 주세요.',
     notice: '신청하시면 행사 전에 행사 관련 자료를 이메일로 보내 드려요.',
@@ -168,7 +168,7 @@
     $all('[data-nav]').forEach(function (a) {
       if (a.getAttribute('data-nav') === v) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     });
-    document.title = $('#h-' + v).textContent + ' · 2026 JBNU-G 리서치페어 위크 관리자';
+    document.title = $('#h-' + v).textContent + ' · 2026 JBNU-BK 리서치페어 위크 관리자';
     if (v === 'dashboard') { if (!S.summary) loadSummary(); else { renderSummary(); } }
     if (v === 'list') loadList();
     if (v === 'export') { renderExport(); loadExportLog(); }
@@ -512,7 +512,7 @@
   function statsAoa(s, who) {
     var b = s.byDay, sc = sumOf(s.daily, 'canceled'), sr = sumOf(s.daily, 'restored');
     return [
-      ['2026 JBNU-G 리서치페어 위크 사전 접수 통계'],
+      ['2026 JBNU-BK 리서치페어 위크 사전 접수 통계'],
       ['기준 일시', fmtDT(s.generatedAt, true)],
       ['내보낸 사람', who || ''],
       ['용어', '유효 신청 = 지금 상태가 ‘신청’인 건(취소 제외). 양일 신청자는 22일·23일 예상 인원에 모두 더함.'],
@@ -1136,7 +1136,7 @@
     // 소속 구분·프로그램 이름표가 필요해 설정을 먼저 확보(못 받으면 id 그대로 나간다)
     ensureRef().then(function () { return API.adminLogExport(kind, f); }).then(function (res) {
       var rows = res.rows, done;
-      var meta = [['행사', '2026 JBNU-G 리서치페어 위크'], ['내보낸 일시', fmtDT(res.entry.at, true)], ['내보낸 사람', res.entry.email], ['조건', f.label]];
+      var meta = [['행사', '2026 JBNU-BK 리서치페어 위크'], ['내보낸 일시', fmtDT(res.entry.at, true)], ['내보낸 사람', res.entry.email], ['조건', f.label]];
       if (kind === 'csv') {
         downloadCsv([COLS].concat(rows.map(rowAoa)), 'RFW2026_신청자_' + stamp() + '.csv');
         done = fmtN(rows.length) + '건';

@@ -8,8 +8,8 @@ window.RFW_I18N = {
 
     hero: {
       rfwAlt: "RFW — 리서치페어 위크 대표 그래픽",
-      nameKo: "2026 JBNU-G 리서치페어 위크",   // 작은 국문 행사명
-      nameEn: "2026 JBNU-G RFW",               // 초대형 영문 행사명
+      nameKo: "2026 JBNU-BK 리서치페어 위크",   // 작은 국문 행사명
+      nameEn: "2026 JBNU-BK RFW",               // 초대형 영문 행사명
       dateStart: { y: "2026.", md: "12. 22.", dow: "Tue" },
       dateEnd: { md: "12. 23.", dow: "Wed" },
       place: "전북대학교 진수당",
@@ -18,8 +18,8 @@ window.RFW_I18N = {
 
     // ── 4장 양식 원문 (수정 금지) ──
     intro: {
-      title: "2026 JBNU-G 리서치페어 위크 참가 신청",
-      body: "전북대학교의 연구성과를 나누고 대학과 지역의 미래 발전 방향을 함께 모색하는 2026 JBNU-G 리서치페어 위크에 여러분을 초대합니다. 대학원생과 연구자의 발표를 통해 BK21 4단계의 성과를 살펴보고, 이를 바탕으로 5단계의 추진 과제와 지역 기업·연구기관과의 새로운 협력 기회를 논의합니다.",
+      title: "2026 JBNU-BK 리서치페어 위크 참가 신청",
+      body: "전북대학교의 연구성과를 나누고 대학과 지역의 미래 발전 방향을 함께 모색하는 2026 JBNU-BK 리서치페어 위크에 여러분을 초대합니다. 대학원생과 연구자의 발표를 통해 BK21 4단계의 성과를 살펴보고, 이를 바탕으로 5단계의 추진 과제와 지역 기업·연구기관과의 새로운 협력 기회를 논의합니다.",
       schedule: "▪일정 : 2026년 12월 22일(화)~23일(수)",
       venue: "▪장소 : 전북대학교 진수당"
     },
@@ -122,16 +122,16 @@ window.RFW_I18N = {
     topbar: { brand: "JBNU BK21 · Research Fair Week", dates: "Dec 22 – 23, 2026", toggle: "한", toggleLabel: "한국어로 보기" },
     hero: {
       rfwAlt: "RFW — Research Fair Week key graphic",
-      nameKo: "2026 JBNU-G Research Fair Week",
-      nameEn: "2026 JBNU-G RFW",
+      nameKo: "2026 JBNU-BK Research Fair Week",
+      nameEn: "2026 JBNU-BK RFW",
       dateStart: { y: "2026.", md: "12. 22.", dow: "Tue" },
       dateEnd: { md: "12. 23.", dow: "Wed" },
       place: "Jinsudang, Jeonbuk National University",
       slogan: "Bridge to JeonbuK NU : From Phase 4 to Phase 5"
     },
     intro: {
-      title: "2026 JBNU-G Research Fair Week Registration",
-      body: "You are invited to the 2026 JBNU-G Research Fair Week, where we share Jeonbuk National University's research achievements and explore the future of the university and the region together. Through presentations by graduate students and researchers, we will review the achievements of BK21 Phase 4 and discuss Phase 5 initiatives and new opportunities for collaboration with local companies and research institutes.",
+      title: "2026 JBNU-BK Research Fair Week Registration",
+      body: "You are invited to the 2026 JBNU-BK Research Fair Week, where we share Jeonbuk National University's research achievements and explore the future of the university and the region together. Through presentations by graduate students and researchers, we will review the achievements of BK21 Phase 4 and discuss Phase 5 initiatives and new opportunities for collaboration with local companies and research institutes.",
       schedule: "▪Date : Dec 22 (Tue) – 23 (Wed), 2026",
       venue: "▪Venue : Jinsudang, Jeonbuk National University"
     },

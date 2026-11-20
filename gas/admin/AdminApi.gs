@@ -69,7 +69,7 @@ function doGet() {
   }
   try { adminLog_(rfwSpreadsheet_(), me, '로그인'); } catch (err) { console.error('로그인 기록 실패: ' + err); }
   return HtmlService.createHtmlOutputFromFile('Admin')
-    .setTitle('관리자 · 2026 JBNU-G 리서치페어 위크')
+    .setTitle('관리자 · 2026 JBNU-BK 리서치페어 위크')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 

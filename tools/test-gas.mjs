@@ -418,7 +418,7 @@ section('관리자 권한');
   check('이메일 없음 → FORBIDDEN', A('adminWhoAmI').code === 'FORBIDDEN');
   as(ADMIN);
   const g2 = admin.ctx.doGet();
-  check('명단 안 doGet → Admin.html', g2.file === 'Admin' && g2.title === '관리자 · 2026 JBNU-G 리서치페어 위크' && g2.metas.viewport === 'width=device-width, initial-scale=1');
+  check('명단 안 doGet → Admin.html', g2.file === 'Admin' && g2.title === '관리자 · 2026 JBNU-BK 리서치페어 위크' && g2.metas.viewport === 'width=device-width, initial-scale=1');
   check('adminWhoAmI (대소문자 무시, 이름)', deepEq(A('adminWhoAmI').data, { email: ADMIN, name: '운영팀' }));
   const acc = A('adminAccessLog').data;
   check('로그인 기록', acc.length === 1 && acc[0].email === ADMIN && acc[0].name === '운영팀' && acc[0].action === '로그인', acc);
